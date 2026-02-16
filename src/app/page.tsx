@@ -1,65 +1,137 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useEffect, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Users, ListTodo, CheckCircle, FolderOpen } from "lucide-react";
+import Link from "next/link";
+
+interface TeamSummary {
+  teams: {
+    name: string;
+    description: string;
+    memberCount: number;
+    taskCount: number;
+    completedTasks: number;
+    activeSince: number;
+  }[];
+}
+
+export default function HomePage() {
+  const [data, setData] = useState<TeamSummary | null>(null);
+
+  useEffect(() => {
+    fetch("/api/teams")
+      .then((r) => r.json())
+      .then(setData);
+  }, []);
+
+  const totalTeams = data?.teams.length || 0;
+  const totalAgents = data?.teams.reduce((s, t) => s + t.memberCount, 0) || 0;
+  const totalTasks = data?.teams.reduce((s, t) => s + t.taskCount, 0) || 0;
+  const completedTasks =
+    data?.teams.reduce((s, t) => s + t.completedTasks, 0) || 0;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Overview</h1>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" /> Teams
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalTeams}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Users className="h-4 w-4" /> Agents
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalAgents}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <ListTodo className="h-4 w-4" /> Tasks
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{totalTasks}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" /> Completed
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{completedTasks}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Team List */}
+      <div>
+        <h2 className="text-lg font-semibold mb-3">Active Teams</h2>
+        {data && data.teams.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {data.teams.map((team) => (
+              <Link key={team.name} href="/team">
+                <Card className="transition-all hover:shadow-md cursor-pointer">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base">{team.name}</CardTitle>
+                      <Badge variant="outline">
+                        {team.completedTasks}/{team.taskCount} tasks
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {team.description}
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex gap-4 text-sm text-muted-foreground">
+                      <span>
+                        <Users className="h-3 w-3 inline mr-1" />
+                        {team.memberCount} agents
+                      </span>
+                      <span>
+                        created{" "}
+                        {new Date(team.activeSince).toLocaleDateString("zh-CN")}
+                      </span>
+                    </div>
+                    {/* Progress bar */}
+                    <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{
+                          width: `${team.taskCount > 0 ? (team.completedTasks / team.taskCount) * 100 : 0}%`,
+                        }}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              暂无活跃 Team。使用 Claude Code 的 TeamCreate 创建一个。
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }
