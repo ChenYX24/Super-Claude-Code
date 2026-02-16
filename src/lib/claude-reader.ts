@@ -155,7 +155,7 @@ export function readTasks(teamName: string): TaskItem[] {
 
 // ---- Aggregate: Team + Members + Tasks + Messages ----
 
-export type MemberStatus = "working" | "idle" | "completed" | "stale";
+export type MemberStatus = "working" | "idle" | "completed" | "stale" | "terminated";
 
 export interface MemberInfo {
   status: MemberStatus;
@@ -168,6 +168,7 @@ export interface TeamOverview {
   messages: TeamMessage[];
   memberStatus: Record<string, MemberStatus>;
   memberInfo: Record<string, MemberInfo>;
+  pastMembers: TeamMember[];
 }
 
 export function getTeamOverview(teamName: string): TeamOverview | null {
@@ -250,7 +251,44 @@ export function getTeamOverview(teamName: string): TeamOverview | null {
     memberInfo[member.name] = { status, lastSeen };
   }
 
-  return { config, tasks, messages, memberStatus, memberInfo };
+  // Discover past members from messages/tasks not in current config
+  const currentNames = new Set(config.members.map((m) => m.name));
+  const discoveredNames = new Set<string>();
+
+  for (const msg of messages) {
+    if (msg.from && !currentNames.has(msg.from)) discoveredNames.add(msg.from);
+    if (msg.to && !currentNames.has(msg.to)) discoveredNames.add(msg.to);
+  }
+  for (const task of tasks) {
+    if (task.owner && !currentNames.has(task.owner)) discoveredNames.add(task.owner);
+  }
+
+  // Also check inbox file names for agents that had inboxes
+  if (fs.existsSync(inboxDir)) {
+    try {
+      for (const file of fs.readdirSync(inboxDir)) {
+        if (!file.endsWith(".json")) continue;
+        const name = file.replace(".json", "");
+        if (!currentNames.has(name)) discoveredNames.add(name);
+      }
+    } catch { /* skip */ }
+  }
+
+  const pastMembers: TeamMember[] = [];
+  for (const name of discoveredNames) {
+    pastMembers.push({
+      agentId: `${name}@${config.name}`,
+      name,
+      agentType: "general-purpose",
+      model: "unknown",
+      joinedAt: 0,
+      color: undefined,
+    });
+    memberStatus[name] = "terminated";
+    memberInfo[name] = { status: "terminated", lastSeen: lastSeenMap[name] };
+  }
+
+  return { config, tasks, messages, memberStatus, memberInfo, pastMembers };
 }
 
 // ---- All Teams Summary ----

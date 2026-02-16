@@ -64,7 +64,8 @@ interface TeamData {
   };
   tasks: TaskItem[];
   messages: TeamMessage[];
-  memberStatus: Record<string, "working" | "idle" | "completed">;
+  memberStatus: Record<string, "working" | "idle" | "completed" | "stale" | "terminated">;
+  pastMembers: TeamMember[];
 }
 
 interface TeamSummaryItem {
@@ -139,6 +140,7 @@ const STATUS_DOT: Record<string, string> = {
   idle: "bg-gray-400",
   completed: "bg-blue-500",
   stale: "bg-amber-500 animate-pulse",
+  terminated: "bg-red-400",
 };
 
 // ---- Components ----
@@ -183,7 +185,10 @@ function AgentItem({
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{member.name}</div>
         <div className="text-xs text-muted-foreground">
-          {shortModel(member.model)}
+          {member.model !== "unknown" ? shortModel(member.model) : ""}
+          {status === "terminated" && (
+            <span className="text-red-400 ml-1">{member.model !== "unknown" ? "· " : ""}Terminated</span>
+          )}
           {status === "stale" && (
             <span className="text-amber-500 ml-1">· Stale</span>
           )}
@@ -486,6 +491,7 @@ export default function TeamPage() {
   const [selectedMsgIdx, setSelectedMsgIdx] = useState<number | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"chat" | "tasks">("chat");
+  const [showPastAgents, setShowPastAgents] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
@@ -540,6 +546,7 @@ export default function TeamPage() {
   const messages = teamData?.messages || [];
   const members = teamData?.config?.members || [];
   const memberStatus = teamData?.memberStatus || {};
+  const pastMembers = teamData?.pastMembers || [];
 
   // Count messages per agent
   const msgCount: Record<string, number> = {};
@@ -586,7 +593,7 @@ export default function TeamPage() {
               {teamData.config.description}
             </div>
             <div className="flex gap-2 mt-1.5 text-xs text-muted-foreground">
-              <span>{members.length} agents</span>
+              <span>{members.length} active{pastMembers.length > 0 ? ` + ${pastMembers.length} past` : ""}</span>
               <span>
                 {completedCount}/{tasks.length} tasks
               </span>
@@ -622,6 +629,8 @@ export default function TeamPage() {
               {messages.length}
             </Badge>
           </div>
+
+          {/* Active agents */}
           {members.map((m) => (
             <AgentItem
               key={m.agentId}
@@ -642,6 +651,38 @@ export default function TeamPage() {
               messageCount={msgCount[m.name] || 0}
             />
           ))}
+
+          {/* Past agents (collapsible) */}
+          {pastMembers.length > 0 && (
+            <>
+              <div
+                className="flex items-center gap-1.5 px-2 py-1.5 mt-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setShowPastAgents(!showPastAgents)}
+              >
+                {showPastAgents ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                <span>Past Agents ({pastMembers.length})</span>
+              </div>
+              {showPastAgents &&
+                pastMembers.map((m) => (
+                  <AgentItem
+                    key={m.agentId}
+                    member={m}
+                    status="terminated"
+                    isSelected={selectedAgent === m.name}
+                    onClick={() =>
+                      setSelectedAgent(
+                        selectedAgent === m.name ? "" : m.name
+                      )
+                    }
+                    messageCount={msgCount[m.name] || 0}
+                  />
+                ))}
+            </>
+          )}
         </div>
       </div>
 
