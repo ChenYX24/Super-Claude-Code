@@ -1,35 +1,48 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { MarkdownContent } from "@/components/markdown-content";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import type { ClaudeMdFile } from "@/lib/claudemd";
-import { Save, AlertCircle, Check } from "lucide-react";
+import { Save, AlertCircle, Check, Plus, X, FolderPlus } from "lucide-react";
+
+interface ProjectOption {
+  encoded: string;
+  decoded: string;
+  hasClaudeMd: boolean;
+  claudeMdPath: string;
+}
 
 export default function EditorPage() {
   const [files, setFiles] = useState<ClaudeMdFile[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [content, setContent] = useState<string>("");
   const [originalContent, setOriginalContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Load file list
-  useEffect(() => {
+  const loadFileList = useCallback(() => {
     fetch("/api/claudemd")
       .then((res) => res.json())
       .then((data) => {
         setFiles(data.files || []);
-        if (data.files && data.files.length > 0) {
+        setProjects(data.projects || []);
+        if (!selectedFile && data.files && data.files.length > 0) {
           setSelectedFile(data.files[0].path);
         }
         setLoading(false);
       })
-      .catch((err) => {
-        console.error("Failed to load files:", err);
-        setLoading(false);
-      });
-  }, []);
+      .catch(() => setLoading(false));
+  }, [selectedFile]);
+
+  // Load file list
+  useEffect(() => { loadFileList(); }, [loadFileList]);
 
   // Load file content when selection changes
   useEffect(() => {
@@ -43,14 +56,11 @@ export default function EditorPage() {
         setLoading(false);
         setSaveStatus("idle");
       })
-      .catch((err) => {
-        console.error("Failed to load content:", err);
-        setLoading(false);
-      });
+      .catch(() => setLoading(false));
   }, [selectedFile]);
 
   // Save handler
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     if (!selectedFile) return;
     setSaving(true);
     try {
@@ -66,29 +76,60 @@ export default function EditorPage() {
       } else {
         setSaveStatus("error");
       }
-    } catch (err) {
-      console.error("Failed to save:", err);
+    } catch {
       setSaveStatus("error");
     } finally {
       setSaving(false);
     }
+  }, [selectedFile, content]);
+
+  // Create CLAUDE.md for a project
+  const handleCreate = async (projectEncoded: string) => {
+    setCreating(true);
+    try {
+      const res = await fetch("/api/claudemd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectEncoded }),
+      });
+      const data = await res.json();
+      if (res.ok && data.path) {
+        setShowCreateDialog(false);
+        // Reload file list and select the new file
+        const listRes = await fetch("/api/claudemd");
+        const listData = await listRes.json();
+        setFiles(listData.files || []);
+        setProjects(listData.projects || []);
+        setSelectedFile(data.path);
+      }
+    } catch { /* skip */ }
+    finally { setCreating(false); }
   };
 
   // Ctrl+S shortcut
+  const hasChanges = content !== originalContent;
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        if (hasChanges && !saving) {
-          handleSave();
-        }
+        if (hasChanges && !saving) handleSave();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [content, originalContent, saving, selectedFile]);
+  }, [hasChanges, saving, handleSave]);
 
-  const hasChanges = content !== originalContent;
+  // Close dialog on outside click
+  useEffect(() => {
+    if (!showCreateDialog) return;
+    const handler = (e: MouseEvent) => {
+      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
+        setShowCreateDialog(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showCreateDialog]);
 
   if (loading && files.length === 0) {
     return (
@@ -98,13 +139,8 @@ export default function EditorPage() {
     );
   }
 
-  if (files.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">No CLAUDE.md files found</p>
-      </div>
-    );
-  }
+  // Projects that don't have CLAUDE.md yet
+  const creatableProjects = projects.filter((p) => !p.hasClaudeMd);
 
   const selectedFileObj = files.find((f) => f.path === selectedFile);
 
@@ -117,13 +153,16 @@ export default function EditorPage() {
           Edit global and project-level CLAUDE.md files
         </p>
 
-        {/* File Selector */}
-        <div className="flex items-center gap-4">
+        {/* File Selector + Create Button */}
+        <div className="flex items-center gap-3">
           <select
             value={selectedFile || ""}
             onChange={(e) => setSelectedFile(e.target.value)}
-            className="px-3 py-2 border rounded-md bg-background text-sm"
+            className="px-3 py-2 border rounded-md bg-background text-sm cursor-pointer"
           >
+            {files.length === 0 && (
+              <option value="">No CLAUDE.md files</option>
+            )}
             {files.map((file) => (
               <option key={file.path} value={file.path}>
                 {file.label}
@@ -131,8 +170,61 @@ export default function EditorPage() {
             ))}
           </select>
 
+          {/* Create button */}
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCreateDialog(!showCreateDialog)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Create
+            </Button>
+
+            {/* Create dialog dropdown */}
+            {showCreateDialog && (
+              <div
+                ref={dialogRef}
+                className="absolute top-full left-0 mt-1 w-80 bg-popover border rounded-lg shadow-lg z-50 overflow-hidden"
+              >
+                <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
+                  <span className="text-sm font-medium flex items-center gap-1.5">
+                    <FolderPlus className="h-4 w-4" />
+                    Create CLAUDE.md
+                  </span>
+                  <button onClick={() => setShowCreateDialog(false)}>
+                    <X className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </div>
+
+                <div className="max-h-64 overflow-auto">
+                  {creatableProjects.length === 0 ? (
+                    <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+                      All projects already have CLAUDE.md
+                    </div>
+                  ) : (
+                    creatableProjects.map((project) => (
+                      <button
+                        key={project.encoded}
+                        disabled={creating}
+                        onClick={() => handleCreate(project.encoded)}
+                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors border-b last:border-b-0 flex items-center gap-2"
+                      >
+                        <FolderPlus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span className="truncate">{project.decoded}</span>
+                        <Badge variant="outline" className="ml-auto text-xs flex-shrink-0">
+                          New
+                        </Badge>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           {selectedFileObj && (
-            <span className="text-xs text-muted-foreground font-mono">
+            <span className="text-xs text-muted-foreground font-mono truncate max-w-md">
               {selectedFileObj.path}
             </span>
           )}
@@ -188,14 +280,13 @@ export default function EditorPage() {
           )}
         </div>
 
-        <button
+        <Button
           onClick={handleSave}
           disabled={!hasChanges || saving}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 hover:bg-primary/90 transition-colors"
         >
-          <Save className="h-4 w-4" />
+          <Save className="h-4 w-4 mr-2" />
           {saving ? "Saving..." : "Save (Ctrl+S)"}
-        </button>
+        </Button>
       </div>
     </div>
   );

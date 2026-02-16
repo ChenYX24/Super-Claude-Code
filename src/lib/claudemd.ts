@@ -109,9 +109,100 @@ export function writeClaudeMdContent(filePath: string, content: string): boolean
   if (!filePath.endsWith("CLAUDE.md")) return false;
 
   try {
+    // 确保目录存在
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     fs.writeFileSync(filePath, content, "utf-8");
     return true;
   } catch {
     return false;
   }
+}
+
+/**
+ * 列出所有已知项目（有 session 数据但可能没有 CLAUDE.md）
+ */
+export interface ProjectOption {
+  encoded: string;   // 编码路径（目录名）
+  decoded: string;   // 解码后的路径
+  hasClaudeMd: boolean;
+  claudeMdPath: string; // CLAUDE.md 将会/已经在的路径
+}
+
+export function listProjectOptions(): ProjectOption[] {
+  if (!fs.existsSync(PROJECTS_DIR)) return [];
+
+  const options: ProjectOption[] = [];
+
+  // 全局
+  const globalPath = path.join(CLAUDE_DIR, "CLAUDE.md");
+  options.push({
+    encoded: "__global__",
+    decoded: "Global (~/.claude/)",
+    hasClaudeMd: fs.existsSync(globalPath),
+    claudeMdPath: globalPath,
+  });
+
+  try {
+    for (const projectDir of fs.readdirSync(PROJECTS_DIR)) {
+      const projectPath = path.join(PROJECTS_DIR, projectDir);
+      try {
+        if (!fs.statSync(projectPath).isDirectory()) continue;
+      } catch { continue; }
+
+      const decoded = decodeProjectPath(projectDir);
+      const claudeMdInProject = path.join(projectPath, "CLAUDE.md");
+      const realClaudeMd = path.join(decoded, "CLAUDE.md");
+
+      // 检查两个可能位置
+      const hasInProjectDir = fs.existsSync(claudeMdInProject);
+      let hasInRealDir = false;
+      try { hasInRealDir = fs.existsSync(realClaudeMd); } catch { /* skip */ }
+
+      options.push({
+        encoded: projectDir,
+        decoded,
+        hasClaudeMd: hasInProjectDir || hasInRealDir,
+        claudeMdPath: hasInRealDir ? realClaudeMd : claudeMdInProject,
+      });
+    }
+  } catch { /* skip */ }
+
+  return options;
+}
+
+/**
+ * 为项目创建 CLAUDE.md（在实际项目目录或 ~/.claude/projects/{project}/ 下）
+ */
+export function createClaudeMd(projectEncoded: string): { success: boolean; path: string; error?: string } {
+  if (projectEncoded === "__global__") {
+    const globalPath = path.join(CLAUDE_DIR, "CLAUDE.md");
+    if (fs.existsSync(globalPath)) {
+      return { success: false, path: globalPath, error: "Global CLAUDE.md already exists" };
+    }
+    const ok = writeClaudeMdContent(globalPath, "# Global Instructions\n\n");
+    return { success: ok, path: globalPath };
+  }
+
+  const decoded = decodeProjectPath(projectEncoded);
+  const realClaudeMd = path.join(decoded, "CLAUDE.md");
+  const projectClaudeMd = path.join(PROJECTS_DIR, projectEncoded, "CLAUDE.md");
+
+  // 优先在实际项目目录创建
+  let targetPath = projectClaudeMd;
+  try {
+    if (fs.existsSync(decoded) && fs.statSync(decoded).isDirectory()) {
+      targetPath = realClaudeMd;
+    }
+  } catch { /* fallback to project dir */ }
+
+  if (fs.existsSync(targetPath)) {
+    return { success: false, path: targetPath, error: "CLAUDE.md already exists" };
+  }
+
+  const template = `# ${decoded}\n\n## Project Instructions\n\n`;
+  const ok = writeClaudeMdContent(targetPath, template);
+  return { success: ok, path: targetPath };
 }
