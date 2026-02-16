@@ -1,36 +1,155 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Super Claude Code
+
+A web dashboard for managing and monitoring [Claude Code](https://docs.anthropic.com/en/docs/claude-code) sessions, teams, tokens, MCP servers, and configuration files.
+
+Built with **Next.js 15** + **TypeScript** + **Tailwind CSS v4** + **shadcn/ui**.
+
+## Features
+
+### Overview Dashboard
+- At-a-glance summary of all Claude Code activity
+- Team status, session counts, token usage stats
+- Quick navigation to all sections
+
+### Team Board
+- Real-time view of team members with status indicators (working / idle / completed / stale / terminated)
+- Task Kanban board (Pending → In Progress → Completed) with task persistence
+- Message stream showing inter-agent communication
+- Past agents discovery and collapsible display (agents removed from config after shutdown are still visible)
+- Team selector dropdown for multiple teams
+
+### Sessions
+- Grid view of all Claude Code sessions across all projects
+- Color-coded status blocks (ClaudeGlance-style)
+- Session detail view with conversation messages
+- File preview for referenced files
+- Deep linking from Team Board to related sessions
+
+### Token Usage
+- Per-session and per-project token consumption tracking
+- Input / Output / Cache Read / Cache Write breakdown
+- Total cost estimation
+- CSV export (Detail mode & Summary mode)
+
+### MCP Server Management
+- View all configured MCP servers (global `settings.json` + per-project `.mcp.json`)
+- Server type, command, args, and environment display
+- Per-project grouping
+
+### CLAUDE.md Editor
+- Split-pane editor with live Markdown preview
+- Edit global and project-level CLAUDE.md files
+- Create new CLAUDE.md files via:
+  - **Project presets** (auto-detected from `~/.claude/projects/`)
+  - **Directory browser** (navigate filesystem with drive switching support)
+  - **Custom path** (paste any directory path)
+- Delete CLAUDE.md files with confirmation dialog
+- Keyboard shortcut: `Ctrl+S` to save
+
+### General
+- Dark mode support (system preference)
+- Responsive layout with sidebar navigation
+- Cursor-pointer on all interactive elements
+- Auto-refreshing data from `~/.claude/` directory
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+- Node.js 18+
+- Claude Code installed and configured (`~/.claude/` directory exists)
+
+### Install & Run
 
 ```bash
+# Clone
+git clone https://github.com/ChenYX24/Super-Claude-Code.git
+cd Super-Claude-Code/dashboard
+
+# Install dependencies
+npm install
+
+# Start dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Build for Production
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+npm start
+```
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+dashboard/
+├── src/
+│   ├── app/                  # Next.js App Router pages
+│   │   ├── page.tsx          # Overview dashboard
+│   │   ├── team/             # Team Board
+│   │   ├── sessions/         # Sessions grid & detail
+│   │   ├── tokens/           # Token usage & export
+│   │   ├── mcp/              # MCP server management
+│   │   ├── editor/           # CLAUDE.md editor
+│   │   └── api/              # API routes
+│   ├── components/           # Shared UI components
+│   │   ├── ui/               # shadcn/ui primitives
+│   │   ├── team-board/       # Team-specific components
+│   │   └── markdown-content.tsx
+│   └── lib/                  # Core logic
+│       ├── claude-reader.ts  # Read ~/.claude/ data (teams, tasks, messages)
+│       ├── session-reader.ts # Read session JSONL files
+│       ├── claudemd.ts       # CLAUDE.md file management
+│       └── types.ts          # Shared types
+├── public/                   # Static assets
+└── package.json
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tech Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 15 (App Router) |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| UI Components | shadcn/ui |
+| Markdown | react-markdown + remark-gfm |
+| Data Source | Local filesystem (`~/.claude/`) |
 
-## Deploy on Vercel
+## TODO / Roadmap
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Phase 3: Dashboard Enhancement
+- [ ] **Settings Panel** — View/edit Claude configuration (settings.json, hooks, permissions)
+- [ ] **Running Process Detection** — Detect active Claude CLI processes, show live status
+- [ ] **Terminal-style Session View** — Render session conversations closer to terminal appearance
+- [ ] **MCP Server Health Check** — Detect whether MCP servers are actually running/reachable
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Phase 4: Claude Code Command Integration
+- [ ] **/dashboard command** — Open dashboard for current session only
+- [ ] **/dashboard_all command** — Open dashboard for all sessions
+- [ ] **Opcode-inspired features** — Reference [opcode](https://github.com/winfunc/opcode)
+
+### Phase 5: External Integrations
+- [ ] **Telegram Bot** (Python + python-telegram-bot) — Mobile control & notifications
+- [ ] **OpenClaw Docker Integration** — Automated task execution in isolated containers
+- [ ] **AstrBot-inspired extensions** — Reference [AstrBot](https://github.com/AstrBotDevs/AstrBot)
+
+### Backlog
+- [ ] Session search & filtering
+- [ ] Token usage charts / time series
+- [ ] Multi-user support
+- [ ] WebSocket-based live updates
+- [ ] i18n (English / Chinese)
+
+## Related Projects
+
+- [opcode](https://github.com/winfunc/opcode) — Claude Code enhancement toolkit
+- [AstrBot](https://github.com/AstrBotDevs/AstrBot) — Multi-platform bot framework
+- [claude-code-telegram](https://github.com/RichardAtCT/claude-code-telegram) — Telegram integration for Claude Code
+- [EdgeClaw](https://github.com/OpenBMB/EdgeClaw) — Secure isolated execution
+
+## License
+
+MIT

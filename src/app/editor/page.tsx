@@ -8,6 +8,7 @@ import type { ClaudeMdFile } from "@/lib/claudemd";
 import {
   Save, AlertCircle, Check, Plus, X, FolderPlus,
   Folder, FolderOpen, ChevronRight, ArrowUp, FileText,
+  Trash2, HardDrive,
 } from "lucide-react";
 
 interface ProjectOption {
@@ -101,6 +102,31 @@ export default function EditorPage() {
     finally { setSaving(false); }
   }, [selectedFile, content]);
 
+  // Delete
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!selectedFile) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/claudemd?path=${encodeURIComponent(selectedFile)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setShowDeleteConfirm(false);
+        const listRes = await fetch("/api/claudemd");
+        const listData = await listRes.json();
+        setFiles(listData.files || []);
+        setProjects(listData.projects || []);
+        setSelectedFile(listData.files?.[0]?.path || null);
+        setContent("");
+        setOriginalContent("");
+      }
+    } catch { /* skip */ }
+    finally { setDeleting(false); }
+  };
+
   // Reload files and select new path
   const afterCreate = async (newPath: string) => {
     setShowCreateDialog(false);
@@ -153,8 +179,13 @@ export default function EditorPage() {
     finally { setCreating(false); }
   };
 
-  // Browse directory
-  const browseTo = async (dirPath: string) => {
+  // browseTo kept as alias for browseToDir (used in JSX)
+  const browseTo = (dirPath: string) => browseToDir(dirPath);
+
+  const [browseIsDriveList, setBrowseIsDriveList] = useState(false);
+
+  // Browse directory (updated to handle drive list)
+  const browseToDir = async (dirPath: string) => {
     setBrowseLoading(true);
     try {
       const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`);
@@ -164,15 +195,16 @@ export default function EditorPage() {
         setBrowseEntries(data.entries || []);
         setBrowseParent(data.parent);
         setBrowseHasClaudeMd(data.hasClaudeMd);
+        setBrowseIsDriveList(!!data.isDriveList);
       }
     } catch { /* skip */ }
     finally { setBrowseLoading(false); }
   };
 
-  // Initialize browse when tab opens
+  // Initialize browse when tab opens — start at drive list
   useEffect(() => {
     if (createTab === "browse" && !browsePath) {
-      browseTo("E:\\");
+      browseToDir("__drives__");
     }
   }, [createTab, browsePath]);
 
@@ -319,7 +351,11 @@ export default function EditorPage() {
                     <div>
                       {/* Current path */}
                       <div className="px-3 py-2 bg-muted/20 border-b flex items-center gap-2">
-                        <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        {browseIsDriveList ? (
+                          <HardDrive className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        ) : (
+                          <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        )}
                         <span className="text-xs font-mono truncate flex-1">{browsePath}</span>
                         {browseHasClaudeMd && (
                           <Badge variant="secondary" className="text-xs flex-shrink-0">
@@ -329,31 +365,44 @@ export default function EditorPage() {
                         )}
                       </div>
 
-                      {/* Create here + Go up buttons */}
-                      <div className="px-3 py-2 border-b flex gap-2">
-                        <Button
-                          size="sm"
-                          variant={browseHasClaudeMd ? "outline" : "default"}
-                          disabled={creating || browseHasClaudeMd}
-                          onClick={() => handleCreateAtPath(browsePath)}
-                          className="flex-1 text-xs"
-                        >
-                          <FolderPlus className="h-3.5 w-3.5 mr-1" />
-                          {browseHasClaudeMd ? "Already exists" : "Create here"}
-                        </Button>
-                        {browseParent && (
+                      {/* Create here + Go up / Drives buttons */}
+                      {!browseIsDriveList && (
+                        <div className="px-3 py-2 border-b flex gap-2">
                           <Button
                             size="sm"
-                            variant="outline"
-                            onClick={() => browseTo(browseParent)}
-                            disabled={browseLoading}
-                            className="text-xs"
+                            variant={browseHasClaudeMd ? "outline" : "default"}
+                            disabled={creating || browseHasClaudeMd}
+                            onClick={() => handleCreateAtPath(browsePath)}
+                            className="flex-1 text-xs"
                           >
-                            <ArrowUp className="h-3.5 w-3.5 mr-1" />
-                            Up
+                            <FolderPlus className="h-3.5 w-3.5 mr-1" />
+                            {browseHasClaudeMd ? "Already exists" : "Create here"}
                           </Button>
-                        )}
-                      </div>
+                          {browseParent ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => browseTo(browseParent)}
+                              disabled={browseLoading}
+                              className="text-xs"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5 mr-1" />
+                              Up
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => browseToDir("__drives__")}
+                              disabled={browseLoading}
+                              className="text-xs"
+                            >
+                              <HardDrive className="h-3.5 w-3.5 mr-1" />
+                              Drives
+                            </Button>
+                          )}
+                        </div>
+                      )}
 
                       {/* Directory listing */}
                       {browseLoading ? (
@@ -367,7 +416,9 @@ export default function EditorPage() {
                             onClick={() => browseTo(entry.path)}
                             className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60 transition-colors border-b last:border-b-0 flex items-center gap-2"
                           >
-                            {entry.hasClaudeMd ? (
+                            {browseIsDriveList ? (
+                              <HardDrive className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                            ) : entry.hasClaudeMd ? (
                               <FolderOpen className="h-3.5 w-3.5 text-primary flex-shrink-0" />
                             ) : (
                               <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
@@ -421,9 +472,39 @@ export default function EditorPage() {
           </div>
 
           {selectedFileObj && (
-            <span className="text-xs text-muted-foreground font-mono truncate max-w-md">
-              {selectedFileObj.path}
-            </span>
+            <>
+              <span className="text-xs text-muted-foreground font-mono truncate max-w-md">
+                {selectedFileObj.path}
+              </span>
+              <div className="relative ml-auto">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeleteConfirm(!showDeleteConfirm)}
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                {showDeleteConfirm && (
+                  <div className="absolute right-0 top-full mt-1 w-64 bg-popover border rounded-lg shadow-lg z-50 p-3">
+                    <p className="text-sm mb-2">
+                      Delete <strong>{selectedFileObj.label}</strong>?
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      This will permanently delete the file.
+                    </p>
+                    <div className="flex gap-2 justify-end">
+                      <Button size="sm" variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={handleDelete} disabled={deleting}>
+                        {deleting ? "Deleting..." : "Delete"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       </div>

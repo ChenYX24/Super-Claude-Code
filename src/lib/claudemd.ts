@@ -210,6 +210,27 @@ export function createClaudeMd(projectEncoded: string): { success: boolean; path
 /**
  * 在任意路径下创建 CLAUDE.md
  */
+/**
+ * 删除 CLAUDE.md 文件
+ */
+export function deleteClaudeMdFile(filePath: string): { success: boolean; error?: string } {
+  if (!filePath.endsWith("CLAUDE.md")) {
+    return { success: false, error: "Can only delete CLAUDE.md files" };
+  }
+  if (!fs.existsSync(filePath)) {
+    return { success: false, error: "File does not exist" };
+  }
+  try {
+    fs.unlinkSync(filePath);
+    return { success: true };
+  } catch {
+    return { success: false, error: "Failed to delete file" };
+  }
+}
+
+/**
+ * 在任意路径下创建 CLAUDE.md
+ */
 export function createClaudeMdAtPath(dirPath: string): { success: boolean; path: string; error?: string } {
   const targetPath = path.join(dirPath, "CLAUDE.md");
 

@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { listClaudeMdFiles, listProjectOptions, createClaudeMd, createClaudeMdAtPath } from "@/lib/claudemd";
+import { listClaudeMdFiles, listProjectOptions, createClaudeMd, createClaudeMdAtPath, deleteClaudeMdFile } from "@/lib/claudemd";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +20,24 @@ export async function GET() {
       { error: "Failed to list CLAUDE.md files" },
       { status: 500 }
     );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const filePath = searchParams.get("path");
+    if (!filePath) {
+      return NextResponse.json({ error: "Missing path" }, { status: 400 });
+    }
+    const result = deleteClaudeMdFile(filePath);
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
+    }
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete CLAUDE.md:", error);
+    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
 }
 

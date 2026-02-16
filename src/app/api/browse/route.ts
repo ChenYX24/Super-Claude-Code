@@ -31,7 +31,48 @@ function isPathAllowed(targetPath: string): boolean {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const dirPath = searchParams.get("path") || os.homedir();
+    const dirPath = searchParams.get("path");
+
+    // Special: list drive roots
+    if (!dirPath || dirPath === "__drives__") {
+      const drives: { name: string; path: string; isDir: boolean; hasClaudeMd: boolean }[] = [];
+      const isWin = process.platform === "win32";
+      if (isWin) {
+        for (const letter of ["C", "D", "E", "F", "G", "H"]) {
+          const root = `${letter}:\\`;
+          try {
+            if (fs.existsSync(root) && fs.statSync(root).isDirectory()) {
+              drives.push({
+                name: `${letter}:`,
+                path: root,
+                isDir: true,
+                hasClaudeMd: fs.existsSync(path.join(root, "CLAUDE.md")),
+              });
+            }
+          } catch { /* skip */ }
+        }
+      } else {
+        for (const root of ["/home", "/Users", "/mnt", "/opt", os.homedir()]) {
+          try {
+            if (fs.existsSync(root) && fs.statSync(root).isDirectory()) {
+              drives.push({
+                name: root,
+                path: root,
+                isDir: true,
+                hasClaudeMd: fs.existsSync(path.join(root, "CLAUDE.md")),
+              });
+            }
+          } catch { /* skip */ }
+        }
+      }
+      return NextResponse.json({
+        current: isWin ? "My Computer" : "/",
+        parent: null,
+        hasClaudeMd: false,
+        entries: drives,
+        isDriveList: true,
+      });
+    }
 
     const resolved = path.resolve(dirPath);
     if (!isPathAllowed(resolved)) {

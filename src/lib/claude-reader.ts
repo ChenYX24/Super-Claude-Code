@@ -128,8 +128,8 @@ export function readAllInboxes(
 
 // ---- Task Reading (with persistence cache) ----
 
-// Cache dir lives next to the dashboard source
-const TASK_CACHE_DIR = path.join(__dirname, "..", "..", ".task-cache");
+// Cache dir lives in the dashboard project root
+const TASK_CACHE_DIR = path.join(process.cwd(), ".task-cache");
 
 function getTaskCachePath(teamName: string): string {
   return path.join(TASK_CACHE_DIR, `${teamName}.json`);
@@ -190,6 +190,16 @@ export function readTasks(teamName: string): TaskItem[] {
   const merged = Array.from(mergedMap.values()).sort(
     (a, b) => parseInt(a.id || "0") - parseInt(b.id || "0")
   );
+
+  // If no live tasks but cache exists, mark non-completed tasks as completed
+  // (Claude Code deleted task files after team finished)
+  if (liveTasks.length === 0 && cachedTasks.length > 0) {
+    for (const t of merged) {
+      if (t.status !== "completed") {
+        t.status = "completed";
+      }
+    }
+  }
 
   // Persist merged snapshot back to cache
   if (merged.length > 0) {
