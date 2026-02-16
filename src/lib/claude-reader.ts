@@ -155,11 +155,19 @@ export function readTasks(teamName: string): TaskItem[] {
 
 // ---- Aggregate: Team + Members + Tasks + Messages ----
 
+export type MemberStatus = "working" | "idle" | "completed" | "stale";
+
+export interface MemberInfo {
+  status: MemberStatus;
+  lastSeen?: number; // timestamp of last activity
+}
+
 export interface TeamOverview {
   config: TeamConfig & { leadSessionId?: string };
   tasks: TaskItem[];
   messages: TeamMessage[];
-  memberStatus: Record<string, "working" | "idle" | "completed">;
+  memberStatus: Record<string, MemberStatus>;
+  memberInfo: Record<string, MemberInfo>;
 }
 
 export function getTeamOverview(teamName: string): TeamOverview | null {
@@ -188,23 +196,61 @@ export function getTeamOverview(teamName: string): TeamOverview | null {
       new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
 
-  // Determine member status from tasks
-  const memberStatus: Record<string, "working" | "idle" | "completed"> = {};
+  // Determine last seen time for each member from messages
+  const lastSeenMap: Record<string, number> = {};
+  for (const msg of messages) {
+    const ts = new Date(msg.timestamp).getTime();
+    if (msg.from && ts > (lastSeenMap[msg.from] || 0)) {
+      lastSeenMap[msg.from] = ts;
+    }
+  }
+
+  // Also check inbox file mtimes for activity signal
+  const inboxDir = path.join(TEAMS_DIR, teamName, "inboxes");
+  if (fs.existsSync(inboxDir)) {
+    try {
+      for (const file of fs.readdirSync(inboxDir)) {
+        if (!file.endsWith(".json")) continue;
+        const name = file.replace(".json", "");
+        try {
+          const mtime = fs.statSync(path.join(inboxDir, file)).mtimeMs;
+          if (mtime > (lastSeenMap[name] || 0)) {
+            lastSeenMap[name] = mtime;
+          }
+        } catch { /* skip */ }
+      }
+    } catch { /* skip */ }
+  }
+
+  const STALE_THRESHOLD = 10 * 60 * 1000; // 10 minutes
+  const now = Date.now();
+
+  // Determine member status from tasks + activity
+  const memberStatus: Record<string, MemberStatus> = {};
+  const memberInfo: Record<string, MemberInfo> = {};
   for (const member of config.members) {
     const memberTasks = tasks.filter((t) => t.owner === member.name);
+    const lastSeen = lastSeenMap[member.name];
+    const isStale = lastSeen ? (now - lastSeen > STALE_THRESHOLD) : true;
+
+    let status: MemberStatus;
     if (memberTasks.some((t) => t.status === "in_progress")) {
-      memberStatus[member.name] = "working";
+      // Has in_progress tasks but hasn't been active → stale
+      status = isStale ? "stale" : "working";
     } else if (
       memberTasks.length > 0 &&
       memberTasks.every((t) => t.status === "completed")
     ) {
-      memberStatus[member.name] = "completed";
+      status = "completed";
     } else {
-      memberStatus[member.name] = "idle";
+      status = "idle";
     }
+
+    memberStatus[member.name] = status;
+    memberInfo[member.name] = { status, lastSeen };
   }
 
-  return { config, tasks, messages, memberStatus };
+  return { config, tasks, messages, memberStatus, memberInfo };
 }
 
 // ---- All Teams Summary ----

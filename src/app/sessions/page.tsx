@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/markdown-content";
@@ -556,17 +557,42 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
 
 // ---- Main Page ----
 
-export default function SessionsPage() {
+function SessionsPageInner() {
   const [data, setData] = useState<SessionsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<{ project: string; id: string } | null>(null);
+  const searchParams = useSearchParams();
+  const deepLinked = useRef(false);
 
   useEffect(() => {
-    fetch("/api/sessions").then(r => r.json()).then((d: SessionsData) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+    fetch("/api/sessions").then(r => r.json()).then((d: SessionsData) => {
+      setData(d);
+      setLoading(false);
+
+      // Deep-link: ?session=UUID auto-opens that session
+      if (!deepLinked.current) {
+        const sessionId = searchParams.get("session");
+        if (sessionId && d.recentSessions) {
+          const match = d.recentSessions.find(s => s.id === sessionId);
+          if (match) {
+            setActive({ project: match.project, id: match.id });
+            deepLinked.current = true;
+          }
+        }
+      }
+    }).catch(() => setLoading(false));
+  }, [searchParams]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (active) return <SessionDetailView projectPath={active.project} sessionId={active.id} onBack={() => setActive(null)} />;
   if (!data) return <div className="text-center py-16"><Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" /><h2 className="text-lg">No data</h2></div>;
   return <SessionList data={data} onSelect={(p, id) => setActive({ project: p, id })} />;
+}
+
+export default function SessionsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+      <SessionsPageInner />
+    </Suspense>
+  );
 }

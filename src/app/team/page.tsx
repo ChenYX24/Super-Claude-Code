@@ -134,10 +134,11 @@ function getAgentStyle(agentType: string, name: string) {
   return AGENT_STYLES[agentType] || AGENT_STYLES["general-purpose"];
 }
 
-const STATUS_DOT = {
+const STATUS_DOT: Record<string, string> = {
   working: "bg-green-500 animate-pulse",
   idle: "bg-gray-400",
   completed: "bg-blue-500",
+  stale: "bg-amber-500 animate-pulse",
 };
 
 // ---- Components ----
@@ -151,7 +152,7 @@ function AgentItem({
   messageCount,
 }: {
   member: TeamMember;
-  status: "working" | "idle" | "completed";
+  status: string;
   currentTask?: string;
   isSelected: boolean;
   onClick: () => void;
@@ -176,13 +177,16 @@ function AgentItem({
           <Icon className={`h-4 w-4 ${style.color}`} />
         </div>
         <div
-          className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background ${STATUS_DOT[status]}`}
+          className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-background ${STATUS_DOT[status] || STATUS_DOT.idle}`}
         />
       </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{member.name}</div>
         <div className="text-xs text-muted-foreground">
           {shortModel(member.model)}
+          {status === "stale" && (
+            <span className="text-amber-500 ml-1">· Stale</span>
+          )}
           {status === "working" && currentTask && (
             <span className="text-blue-500 ml-1">
               · {currentTask.slice(0, 20)}
@@ -589,7 +593,7 @@ export default function TeamPage() {
             </div>
             {teamData.config.leadSessionId && (
               <Link
-                href="/sessions"
+                href={`/sessions?session=${teamData.config.leadSessionId}`}
                 className="flex items-center gap-1 mt-1.5 text-xs text-primary hover:underline"
               >
                 <Terminal className="h-3 w-3" />
