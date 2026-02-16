@@ -14,6 +14,7 @@ interface TeamSummary {
     taskCount: number;
     completedTasks: number;
     activeSince: number;
+    leadSessionId?: string;
   }[];
 }
 

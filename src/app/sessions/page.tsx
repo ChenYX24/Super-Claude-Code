@@ -201,6 +201,15 @@ function ConvMessage({ msg, showTools }: { msg: SessionMessage; showTools: boole
 
 // ---- Session Detail ----
 
+interface FilePreview {
+  path: string;
+  fileName: string;
+  ext: string;
+  content: string;
+  size: number;
+  lastModified: number;
+}
+
 function SessionDetailView({ projectPath, sessionId, onBack }: {
   projectPath: string; sessionId: string; onBack: () => void;
 }) {
@@ -209,6 +218,8 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
   const [showTools, setShowTools] = useState(true);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
+  const [previewFile, setPreviewFile] = useState<FilePreview | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -227,6 +238,24 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
     const el = document.getElementById(`cp-${msg.uuid}`);
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [detail]);
+
+  const loadFilePreview = useCallback((filePath: string) => {
+    setPreviewLoading(true);
+    fetch(`/api/file-preview?path=${encodeURIComponent(filePath)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) {
+          setPreviewFile({ path: filePath, fileName: filePath.split(/[/\\]/).pop() || "", ext: "", content: `Error: ${d.error}`, size: 0, lastModified: 0 });
+        } else {
+          setPreviewFile(d);
+        }
+        setPreviewLoading(false);
+      })
+      .catch(() => {
+        setPreviewFile({ path: filePath, fileName: filePath.split(/[/\\]/).pop() || "", ext: "", content: "Failed to load file", size: 0, lastModified: 0 });
+        setPreviewLoading(false);
+      });
+  }, []);
 
   if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (!detail) return (
@@ -293,9 +322,18 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
               <div className="p-2 space-y-1">
                 <div className="text-xs font-medium text-muted-foreground px-2 py-1">Referenced Files</div>
                 {detail.contextFiles.map((f, i) => (
-                  <div key={i} className="px-2 py-1 text-xs font-mono truncate text-muted-foreground hover:text-foreground cursor-default" title={f}>
+                  <button
+                    key={i}
+                    className={`w-full text-left px-2 py-1.5 text-xs font-mono truncate rounded transition-colors ${
+                      previewFile?.path === f
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    }`}
+                    title={f}
+                    onClick={() => loadFilePreview(f)}
+                  >
                     <FileText className="h-3 w-3 inline mr-1" />{f.split(/[/\\]/).pop()}
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -303,21 +341,57 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
         )}
 
         {/* Conversation */}
-        <div className="flex-1 overflow-auto relative" ref={scrollRef}>
+        <div className={`${previewFile ? "w-1/2" : "flex-1"} overflow-auto relative`} ref={scrollRef}>
           <div className="divide-y divide-border/30">
             {visible.map(msg => <ConvMessage key={msg.uuid} msg={msg} showTools={showTools} />)}
           </div>
 
-          {/* Floating nav buttons */}
-          <div className="fixed bottom-6 right-8 flex flex-col gap-2">
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0 shadow-md" onClick={scrollToTop}>
+          {/* Floating nav buttons - right side of conversation */}
+          <div className="sticky bottom-4 float-right mr-4 flex flex-col gap-2">
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0 shadow-md bg-background" onClick={scrollToTop}>
               <ChevronsUp className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" className="h-8 w-8 p-0 shadow-md" onClick={scrollToBottom}>
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0 shadow-md bg-background" onClick={scrollToBottom}>
               <ChevronsDown className="h-4 w-4" />
             </Button>
           </div>
         </div>
+
+        {/* File Preview Panel */}
+        {previewFile && (
+          <div className="w-1/2 border-l flex flex-col bg-muted/5">
+            <div className="flex items-center gap-2 px-3 py-2 border-b flex-shrink-0">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium truncate flex-1" title={previewFile.path}>
+                {previewFile.fileName}
+              </span>
+              {previewFile.size > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {(previewFile.size / 1024).toFixed(1)}KB
+                </span>
+              )}
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setPreviewFile(null)}>
+                ×
+              </Button>
+            </div>
+            <div className="flex-1 overflow-auto p-3">
+              {previewLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : previewFile.ext === ".md" ? (
+                <MarkdownContent content={previewFile.content} className="text-sm" />
+              ) : (
+                <pre className="text-xs font-mono whitespace-pre-wrap break-words text-muted-foreground">
+                  {previewFile.content}
+                </pre>
+              )}
+            </div>
+            <div className="px-3 py-1.5 border-t text-xs text-muted-foreground truncate">
+              {previewFile.path}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

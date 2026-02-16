@@ -156,7 +156,7 @@ export function readTasks(teamName: string): TaskItem[] {
 // ---- Aggregate: Team + Members + Tasks + Messages ----
 
 export interface TeamOverview {
-  config: TeamConfig;
+  config: TeamConfig & { leadSessionId?: string };
   tasks: TaskItem[];
   messages: TeamMessage[];
   memberStatus: Record<string, "working" | "idle" | "completed">;
@@ -217,22 +217,28 @@ export interface TeamsSummary {
     taskCount: number;
     completedTasks: number;
     activeSince: number;
+    leadSessionId?: string;
   }[];
 }
 
 export function getAllTeamsSummary(): TeamsSummary {
   const teamNames = listTeams();
-  const teams = teamNames.map((name) => {
-    const config = readTeamConfig(name);
-    const tasks = readTasks(name);
-    return {
-      name,
-      description: config?.description || "",
-      memberCount: config?.members?.length || 0,
-      taskCount: tasks.length,
-      completedTasks: tasks.filter((t) => t.status === "completed").length,
-      activeSince: config?.createdAt || 0,
-    };
-  });
+  const teams = teamNames
+    .map((name) => {
+      const config = readTeamConfig(name);
+      // Skip teams without a valid config (empty dirs like UUIDs or "default")
+      if (!config || !config.name) return null;
+      const tasks = readTasks(name);
+      return {
+        name,
+        description: config.description || "",
+        memberCount: config.members?.length || 0,
+        taskCount: tasks.length,
+        completedTasks: tasks.filter((t) => t.status === "completed").length,
+        activeSince: config.createdAt || 0,
+        leadSessionId: (config as TeamConfig & { leadSessionId?: string }).leadSessionId,
+      };
+    })
+    .filter((t): t is NonNullable<typeof t> => t !== null);
   return { teams };
 }
