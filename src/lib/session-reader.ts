@@ -429,3 +429,39 @@ export function getTokenSummary(): TokenSummary {
 
   return { totalInput, totalOutput, totalCacheRead, totalCost, byModel, byDate, sessionCount: sessions.length };
 }
+
+// ---- CSV Export ----
+
+export interface TokenExportRow {
+  date: string;
+  project: string;
+  sessionId: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  estimatedCost: number;
+}
+
+export function getTokenExportData(): TokenExportRow[] {
+  const projects = listProjects();
+  const rows: TokenExportRow[] = [];
+
+  for (const project of projects) {
+    const sessions = listSessions(project.path);
+    for (const session of sessions) {
+      rows.push({
+        date: session.startTime ? new Date(session.startTime).toISOString().split("T")[0] : "unknown",
+        project: session.projectName,
+        sessionId: session.id,
+        model: session.model || "unknown",
+        inputTokens: session.totalInputTokens,
+        outputTokens: session.totalOutputTokens,
+        cacheReadTokens: session.cacheReadTokens,
+        estimatedCost: session.estimatedCost,
+      });
+    }
+  }
+
+  return rows.sort((a, b) => b.date.localeCompare(a.date));
+}

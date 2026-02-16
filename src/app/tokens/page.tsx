@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
-  DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw, Info, Database,
+  DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw, Info, Database, Download,
 } from "lucide-react";
 
 interface TokensData {
@@ -65,6 +66,16 @@ export default function TokensPage() {
     fetch("/api/tokens").then(r => r.json()).then((d: TokensData) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
+  const handleExport = (type: "detail" | "summary") => {
+    const url = `/api/tokens/export?type=${type}`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `claude-tokens-${type}-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (!data) return <div className="text-center py-16"><DollarSign className="h-12 w-12 mx-auto text-muted-foreground mb-4" /><h2 className="text-lg">No data</h2></div>;
 
@@ -85,7 +96,19 @@ export default function TokensPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Token Usage & Cost</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Token Usage & Cost</h1>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => handleExport("detail")}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Detail CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => handleExport("summary")}>
+            <Download className="h-4 w-4 mr-2" />
+            Export Summary CSV
+          </Button>
+        </div>
+      </div>
 
       {data.sessionCount === 0 && (
         <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">

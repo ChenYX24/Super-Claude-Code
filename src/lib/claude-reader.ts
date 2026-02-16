@@ -288,3 +288,76 @@ export function getAllTeamsSummary(): TeamsSummary {
     .filter((t): t is NonNullable<typeof t> => t !== null);
   return { teams };
 }
+
+// ---- MCP Server Reading ----
+
+export interface MCPServerConfig {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  type?: string;
+}
+
+export interface MCPServersData {
+  global: Record<string, MCPServerConfig>;
+  projects: { project: string; servers: Record<string, MCPServerConfig> }[];
+}
+
+const PROJECTS_DIR = path.join(CLAUDE_DIR, "projects");
+const SETTINGS_FILE = path.join(CLAUDE_DIR, "settings.json");
+
+export function readMCPServers(): MCPServersData {
+  const result: MCPServersData = {
+    global: {},
+    projects: [],
+  };
+
+  // Read global settings
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      const raw = sanitize(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+      const settings = JSON.parse(raw);
+      if (settings.mcpServers && typeof settings.mcpServers === "object") {
+        result.global = settings.mcpServers;
+      }
+    } catch {
+      // skip
+    }
+  }
+
+  // Scan projects for .mcp.json files
+  if (fs.existsSync(PROJECTS_DIR)) {
+    try {
+      const projectDirs = fs.readdirSync(PROJECTS_DIR).filter((d) => {
+        try {
+          return fs.statSync(path.join(PROJECTS_DIR, d)).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+
+      for (const projectName of projectDirs) {
+        const mcpFile = path.join(PROJECTS_DIR, projectName, ".mcp.json");
+        if (fs.existsSync(mcpFile)) {
+          try {
+            const raw = sanitize(fs.readFileSync(mcpFile, "utf-8"));
+            const mcpConfig = JSON.parse(raw);
+            if (mcpConfig.mcpServers && typeof mcpConfig.mcpServers === "object") {
+              result.projects.push({
+                project: projectName,
+                servers: mcpConfig.mcpServers,
+              });
+            }
+          } catch {
+            // skip corrupt files
+          }
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
+
+  return result;
+}
