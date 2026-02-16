@@ -126,31 +126,77 @@ export function readAllInboxes(
   return result;
 }
 
-// ---- Task Reading ----
+// ---- Task Reading (with persistence cache) ----
+
+// Cache dir lives next to the dashboard source
+const TASK_CACHE_DIR = path.join(__dirname, "..", "..", ".task-cache");
+
+function getTaskCachePath(teamName: string): string {
+  return path.join(TASK_CACHE_DIR, `${teamName}.json`);
+}
+
+function loadTaskCache(teamName: string): TaskItem[] {
+  const cachePath = getTaskCachePath(teamName);
+  return safeReadJSON<TaskItem[]>(cachePath, []);
+}
+
+function saveTaskCache(teamName: string, tasks: TaskItem[]): void {
+  try {
+    if (!fs.existsSync(TASK_CACHE_DIR)) {
+      fs.mkdirSync(TASK_CACHE_DIR, { recursive: true });
+    }
+    fs.writeFileSync(
+      getTaskCachePath(teamName),
+      JSON.stringify(tasks, null, 2),
+      "utf-8"
+    );
+  } catch { /* skip */ }
+}
 
 export function readTasks(teamName: string): TaskItem[] {
   const taskDir = path.join(TASKS_DIR, teamName);
-  if (!fs.existsSync(taskDir)) return [];
-  const tasks: TaskItem[] = [];
-  try {
-    for (const file of fs.readdirSync(taskDir)) {
-      if (!file.endsWith(".json")) continue;
-      try {
-        const raw = sanitize(
-          fs.readFileSync(path.join(taskDir, file), "utf-8")
-        );
-        const data = JSON.parse(raw);
-        tasks.push({ id: file.replace(".json", ""), ...data });
-      } catch {
-        // skip corrupt files
+
+  // Read live tasks from Claude's task dir
+  const liveTasks: TaskItem[] = [];
+  if (fs.existsSync(taskDir)) {
+    try {
+      for (const file of fs.readdirSync(taskDir)) {
+        if (!file.endsWith(".json")) continue;
+        try {
+          const raw = sanitize(
+            fs.readFileSync(path.join(taskDir, file), "utf-8")
+          );
+          const data = JSON.parse(raw);
+          liveTasks.push({ id: file.replace(".json", ""), ...data });
+        } catch {
+          // skip corrupt files
+        }
       }
-    }
-  } catch {
-    // skip
+    } catch { /* skip */ }
   }
-  return tasks.sort(
+
+  // Load cached tasks
+  const cachedTasks = loadTaskCache(teamName);
+
+  // Merge: live tasks override cache, cache fills in deleted tasks
+  const mergedMap = new Map<string, TaskItem>();
+  for (const t of cachedTasks) {
+    mergedMap.set(t.id, t);
+  }
+  for (const t of liveTasks) {
+    mergedMap.set(t.id, t);
+  }
+
+  const merged = Array.from(mergedMap.values()).sort(
     (a, b) => parseInt(a.id || "0") - parseInt(b.id || "0")
   );
+
+  // Persist merged snapshot back to cache
+  if (merged.length > 0) {
+    saveTaskCache(teamName, merged);
+  }
+
+  return merged;
 }
 
 // ---- Aggregate: Team + Members + Tasks + Messages ----

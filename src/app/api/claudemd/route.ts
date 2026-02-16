@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { listClaudeMdFiles, listProjectOptions, createClaudeMd } from "@/lib/claudemd";
+import { listClaudeMdFiles, listProjectOptions, createClaudeMd, createClaudeMdAtPath } from "@/lib/claudemd";
 
 export const dynamic = "force-dynamic";
 
@@ -26,16 +26,18 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectEncoded } = body;
+    const { projectEncoded, customPath } = body;
 
-    if (!projectEncoded || typeof projectEncoded !== "string") {
+    if (!projectEncoded && !customPath) {
       return NextResponse.json(
-        { error: "Missing projectEncoded" },
+        { error: "Missing projectEncoded or customPath" },
         { status: 400 }
       );
     }
 
-    const result = createClaudeMd(projectEncoded);
+    const result = customPath
+      ? createClaudeMdAtPath(customPath)
+      : createClaudeMd(projectEncoded);
     if (!result.success) {
       return NextResponse.json(
         { error: result.error || "Failed to create", path: result.path },

@@ -206,3 +206,24 @@ export function createClaudeMd(projectEncoded: string): { success: boolean; path
   const ok = writeClaudeMdContent(targetPath, template);
   return { success: ok, path: targetPath };
 }
+
+/**
+ * 在任意路径下创建 CLAUDE.md
+ */
+export function createClaudeMdAtPath(dirPath: string): { success: boolean; path: string; error?: string } {
+  const targetPath = path.join(dirPath, "CLAUDE.md");
+
+  if (fs.existsSync(targetPath)) {
+    return { success: false, path: targetPath, error: "CLAUDE.md already exists at this path" };
+  }
+
+  // Verify directory exists
+  if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
+    return { success: false, path: targetPath, error: "Directory does not exist" };
+  }
+
+  const dirName = path.basename(dirPath) || dirPath;
+  const template = `# ${dirName}\n\n## Project Instructions\n\n`;
+  const ok = writeClaudeMdContent(targetPath, template);
+  return { success: ok, path: targetPath };
+}

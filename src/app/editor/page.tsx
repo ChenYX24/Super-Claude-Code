@@ -5,7 +5,10 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { ClaudeMdFile } from "@/lib/claudemd";
-import { Save, AlertCircle, Check, Plus, X, FolderPlus } from "lucide-react";
+import {
+  Save, AlertCircle, Check, Plus, X, FolderPlus,
+  Folder, FolderOpen, ChevronRight, ArrowUp, FileText,
+} from "lucide-react";
 
 interface ProjectOption {
   encoded: string;
@@ -13,6 +16,15 @@ interface ProjectOption {
   hasClaudeMd: boolean;
   claudeMdPath: string;
 }
+
+interface BrowseEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  hasClaudeMd: boolean;
+}
+
+type CreateTab = "projects" | "browse" | "custom";
 
 export default function EditorPage() {
   const [files, setFiles] = useState<ClaudeMdFile[]>([]);
@@ -25,6 +37,17 @@ export default function EditorPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [createTab, setCreateTab] = useState<CreateTab>("projects");
+  // Browse state
+  const [browsePath, setBrowsePath] = useState<string>("");
+  const [browseEntries, setBrowseEntries] = useState<BrowseEntry[]>([]);
+  const [browseParent, setBrowseParent] = useState<string | null>(null);
+  const [browseHasClaudeMd, setBrowseHasClaudeMd] = useState(false);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  // Custom path state
+  const [customPath, setCustomPath] = useState<string>("");
+  const [createError, setCreateError] = useState<string>("");
+
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const loadFileList = useCallback(() => {
@@ -41,10 +64,9 @@ export default function EditorPage() {
       .catch(() => setLoading(false));
   }, [selectedFile]);
 
-  // Load file list
   useEffect(() => { loadFileList(); }, [loadFileList]);
 
-  // Load file content when selection changes
+  // Load file content
   useEffect(() => {
     if (!selectedFile) return;
     setLoading(true);
@@ -59,7 +81,6 @@ export default function EditorPage() {
       .catch(() => setLoading(false));
   }, [selectedFile]);
 
-  // Save handler
   const handleSave = useCallback(async () => {
     if (!selectedFile) return;
     setSaving(true);
@@ -76,16 +97,25 @@ export default function EditorPage() {
       } else {
         setSaveStatus("error");
       }
-    } catch {
-      setSaveStatus("error");
-    } finally {
-      setSaving(false);
-    }
+    } catch { setSaveStatus("error"); }
+    finally { setSaving(false); }
   }, [selectedFile, content]);
 
-  // Create CLAUDE.md for a project
-  const handleCreate = async (projectEncoded: string) => {
+  // Reload files and select new path
+  const afterCreate = async (newPath: string) => {
+    setShowCreateDialog(false);
+    setCreateError("");
+    const listRes = await fetch("/api/claudemd");
+    const listData = await listRes.json();
+    setFiles(listData.files || []);
+    setProjects(listData.projects || []);
+    setSelectedFile(newPath);
+  };
+
+  // Create from project preset
+  const handleCreateFromProject = async (projectEncoded: string) => {
     setCreating(true);
+    setCreateError("");
     try {
       const res = await fetch("/api/claudemd", {
         method: "POST",
@@ -94,19 +124,59 @@ export default function EditorPage() {
       });
       const data = await res.json();
       if (res.ok && data.path) {
-        setShowCreateDialog(false);
-        // Reload file list and select the new file
-        const listRes = await fetch("/api/claudemd");
-        const listData = await listRes.json();
-        setFiles(listData.files || []);
-        setProjects(listData.projects || []);
-        setSelectedFile(data.path);
+        await afterCreate(data.path);
+      } else {
+        setCreateError(data.error || "Failed to create");
       }
-    } catch { /* skip */ }
+    } catch { setCreateError("Network error"); }
     finally { setCreating(false); }
   };
 
-  // Ctrl+S shortcut
+  // Create from custom/browse path
+  const handleCreateAtPath = async (dirPath: string) => {
+    if (!dirPath.trim()) return;
+    setCreating(true);
+    setCreateError("");
+    try {
+      const res = await fetch("/api/claudemd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customPath: dirPath.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.path) {
+        await afterCreate(data.path);
+      } else {
+        setCreateError(data.error || "Failed to create");
+      }
+    } catch { setCreateError("Network error"); }
+    finally { setCreating(false); }
+  };
+
+  // Browse directory
+  const browseTo = async (dirPath: string) => {
+    setBrowseLoading(true);
+    try {
+      const res = await fetch(`/api/browse?path=${encodeURIComponent(dirPath)}`);
+      const data = await res.json();
+      if (res.ok) {
+        setBrowsePath(data.current);
+        setBrowseEntries(data.entries || []);
+        setBrowseParent(data.parent);
+        setBrowseHasClaudeMd(data.hasClaudeMd);
+      }
+    } catch { /* skip */ }
+    finally { setBrowseLoading(false); }
+  };
+
+  // Initialize browse when tab opens
+  useEffect(() => {
+    if (createTab === "browse" && !browsePath) {
+      browseTo("E:\\");
+    }
+  }, [createTab, browsePath]);
+
+  // Ctrl+S
   const hasChanges = content !== originalContent;
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -139,9 +209,7 @@ export default function EditorPage() {
     );
   }
 
-  // Projects that don't have CLAUDE.md yet
   const creatableProjects = projects.filter((p) => !p.hasClaudeMd);
-
   const selectedFileObj = files.find((f) => f.path === selectedFile);
 
   return (
@@ -153,20 +221,15 @@ export default function EditorPage() {
           Edit global and project-level CLAUDE.md files
         </p>
 
-        {/* File Selector + Create Button */}
         <div className="flex items-center gap-3">
           <select
             value={selectedFile || ""}
             onChange={(e) => setSelectedFile(e.target.value)}
             className="px-3 py-2 border rounded-md bg-background text-sm cursor-pointer"
           >
-            {files.length === 0 && (
-              <option value="">No CLAUDE.md files</option>
-            )}
+            {files.length === 0 && <option value="">No CLAUDE.md files</option>}
             {files.map((file) => (
-              <option key={file.path} value={file.path}>
-                {file.label}
-              </option>
+              <option key={file.path} value={file.path}>{file.label}</option>
             ))}
           </select>
 
@@ -175,18 +238,19 @@ export default function EditorPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowCreateDialog(!showCreateDialog)}
+              onClick={() => { setShowCreateDialog(!showCreateDialog); setCreateError(""); }}
             >
               <Plus className="h-4 w-4 mr-1" />
               Create
             </Button>
 
-            {/* Create dialog dropdown */}
+            {/* Create dialog */}
             {showCreateDialog && (
               <div
                 ref={dialogRef}
-                className="absolute top-full left-0 mt-1 w-80 bg-popover border rounded-lg shadow-lg z-50 overflow-hidden"
+                className="absolute top-full left-0 mt-1 w-96 bg-popover border rounded-lg shadow-lg z-50 overflow-hidden"
               >
+                {/* Dialog header */}
                 <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
                   <span className="text-sm font-medium flex items-center gap-1.5">
                     <FolderPlus className="h-4 w-4" />
@@ -197,26 +261,159 @@ export default function EditorPage() {
                   </button>
                 </div>
 
-                <div className="max-h-64 overflow-auto">
-                  {creatableProjects.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                      All projects already have CLAUDE.md
+                {/* Tabs */}
+                <div className="flex border-b">
+                  {([
+                    { key: "projects" as const, label: "Projects" },
+                    { key: "browse" as const, label: "Browse" },
+                    { key: "custom" as const, label: "Custom Path" },
+                  ]).map((tab) => (
+                    <button
+                      key={tab.key}
+                      className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${
+                        createTab === tab.key
+                          ? "border-b-2 border-primary text-primary"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                      onClick={() => setCreateTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Error display */}
+                {createError && (
+                  <div className="px-3 py-2 bg-red-50 dark:bg-red-950/20 text-red-600 text-xs flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {createError}
+                  </div>
+                )}
+
+                {/* Tab content */}
+                <div className="max-h-72 overflow-auto">
+                  {/* Projects tab */}
+                  {createTab === "projects" && (
+                    creatableProjects.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+                        All projects already have CLAUDE.md
+                      </div>
+                    ) : (
+                      creatableProjects.map((project) => (
+                        <button
+                          key={project.encoded}
+                          disabled={creating}
+                          onClick={() => handleCreateFromProject(project.encoded)}
+                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors border-b last:border-b-0 flex items-center gap-2"
+                        >
+                          <FolderPlus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{project.decoded}</span>
+                          <Badge variant="outline" className="ml-auto text-xs flex-shrink-0">New</Badge>
+                        </button>
+                      ))
+                    )
+                  )}
+
+                  {/* Browse tab */}
+                  {createTab === "browse" && (
+                    <div>
+                      {/* Current path */}
+                      <div className="px-3 py-2 bg-muted/20 border-b flex items-center gap-2">
+                        <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        <span className="text-xs font-mono truncate flex-1">{browsePath}</span>
+                        {browseHasClaudeMd && (
+                          <Badge variant="secondary" className="text-xs flex-shrink-0">
+                            <FileText className="h-3 w-3 mr-1" />
+                            Exists
+                          </Badge>
+                        )}
+                      </div>
+
+                      {/* Create here + Go up buttons */}
+                      <div className="px-3 py-2 border-b flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={browseHasClaudeMd ? "outline" : "default"}
+                          disabled={creating || browseHasClaudeMd}
+                          onClick={() => handleCreateAtPath(browsePath)}
+                          className="flex-1 text-xs"
+                        >
+                          <FolderPlus className="h-3.5 w-3.5 mr-1" />
+                          {browseHasClaudeMd ? "Already exists" : "Create here"}
+                        </Button>
+                        {browseParent && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => browseTo(browseParent)}
+                            disabled={browseLoading}
+                            className="text-xs"
+                          >
+                            <ArrowUp className="h-3.5 w-3.5 mr-1" />
+                            Up
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Directory listing */}
+                      {browseLoading ? (
+                        <div className="px-3 py-4 text-sm text-muted-foreground text-center">Loading...</div>
+                      ) : browseEntries.length === 0 ? (
+                        <div className="px-3 py-4 text-sm text-muted-foreground text-center">No subdirectories</div>
+                      ) : (
+                        browseEntries.map((entry) => (
+                          <button
+                            key={entry.path}
+                            onClick={() => browseTo(entry.path)}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted/60 transition-colors border-b last:border-b-0 flex items-center gap-2"
+                          >
+                            {entry.hasClaudeMd ? (
+                              <FolderOpen className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                            ) : (
+                              <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                            )}
+                            <span className="truncate">{entry.name}</span>
+                            {entry.hasClaudeMd && (
+                              <Badge variant="secondary" className="ml-auto text-xs flex-shrink-0">
+                                <FileText className="h-3 w-3" />
+                              </Badge>
+                            )}
+                            <ChevronRight className="h-3 w-3 text-muted-foreground flex-shrink-0 ml-auto" />
+                          </button>
+                        ))
+                      )}
                     </div>
-                  ) : (
-                    creatableProjects.map((project) => (
-                      <button
-                        key={project.encoded}
-                        disabled={creating}
-                        onClick={() => handleCreate(project.encoded)}
-                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/60 transition-colors border-b last:border-b-0 flex items-center gap-2"
+                  )}
+
+                  {/* Custom path tab */}
+                  {createTab === "custom" && (
+                    <div className="p-3 space-y-3">
+                      <div>
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          Directory path (CLAUDE.md will be created inside):
+                        </label>
+                        <input
+                          type="text"
+                          value={customPath}
+                          onChange={(e) => setCustomPath(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleCreateAtPath(customPath);
+                          }}
+                          placeholder="E:\my-project or /home/user/project"
+                          className="w-full px-3 py-2 border rounded-md bg-background text-sm font-mono"
+                          autoFocus
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        disabled={!customPath.trim() || creating}
+                        onClick={() => handleCreateAtPath(customPath)}
+                        className="w-full"
                       >
-                        <FolderPlus className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                        <span className="truncate">{project.decoded}</span>
-                        <Badge variant="outline" className="ml-auto text-xs flex-shrink-0">
-                          New
-                        </Badge>
-                      </button>
-                    ))
+                        <FolderPlus className="h-4 w-4 mr-1" />
+                        {creating ? "Creating..." : "Create CLAUDE.md"}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -233,7 +430,6 @@ export default function EditorPage() {
 
       {/* Editor + Preview */}
       <div className="flex-1 grid grid-cols-2 gap-4 overflow-hidden">
-        {/* Left: Editor */}
         <div className="flex flex-col border rounded-md overflow-hidden">
           <div className="bg-muted/30 px-3 py-2 border-b">
             <h2 className="text-sm font-medium">Editor</h2>
@@ -246,7 +442,6 @@ export default function EditorPage() {
           />
         </div>
 
-        {/* Right: Preview */}
         <div className="flex flex-col border rounded-md overflow-hidden">
           <div className="bg-muted/30 px-3 py-2 border-b">
             <h2 className="text-sm font-medium">Preview</h2>
@@ -257,33 +452,26 @@ export default function EditorPage() {
         </div>
       </div>
 
-      {/* Footer: Save Button */}
+      {/* Footer */}
       <div className="mt-4 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm">
           {hasChanges && (
             <span className="text-amber-600 flex items-center gap-1">
-              <AlertCircle className="h-4 w-4" />
-              Unsaved changes
+              <AlertCircle className="h-4 w-4" />Unsaved changes
             </span>
           )}
           {saveStatus === "saved" && (
             <span className="text-green-600 flex items-center gap-1">
-              <Check className="h-4 w-4" />
-              Saved successfully
+              <Check className="h-4 w-4" />Saved successfully
             </span>
           )}
           {saveStatus === "error" && (
             <span className="text-red-600 flex items-center gap-1">
-              <AlertCircle className="h-4 w-4" />
-              Save failed
+              <AlertCircle className="h-4 w-4" />Save failed
             </span>
           )}
         </div>
-
-        <Button
-          onClick={handleSave}
-          disabled={!hasChanges || saving}
-        >
+        <Button onClick={handleSave} disabled={!hasChanges || saving}>
           <Save className="h-4 w-4 mr-2" />
           {saving ? "Saving..." : "Save (Ctrl+S)"}
         </Button>
