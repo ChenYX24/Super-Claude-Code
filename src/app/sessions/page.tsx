@@ -8,7 +8,7 @@ import {
   Clock, FolderOpen, Hash, RefreshCw, ArrowLeft, User, Bot,
   Wrench, Brain, ChevronDown, ChevronRight, Coins, MessageSquare,
   ChevronsUp, ChevronsDown, MapPin, FileText, DollarSign,
-  LayoutGrid, List, Zap, Moon, Archive,
+  LayoutGrid, List, Zap, Moon, Archive, AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -20,6 +20,7 @@ interface SessionInfo {
   firstMessage?: string; model?: string;
   totalInputTokens: number; totalOutputTokens: number;
   cacheReadTokens: number; estimatedCost: number;
+  status?: string;
 }
 
 interface ProjectInfo { path: string; name: string; sessionCount: number; lastActive: number; }
@@ -78,23 +79,21 @@ function shortModel(m?: string) {
   return m;
 }
 
-// ---- Session Status ----
+// ---- Session Status (ClaudeGlance-inspired colors) ----
 
-type SessionStatus = "active" | "recent" | "idle" | "old";
+type SessionStatus = "reading" | "thinking" | "writing" | "waiting" | "completed" | "error" | "idle";
 
-function getSessionStatus(lastActive: number): SessionStatus {
-  const diff = Date.now() - lastActive;
-  if (diff < 5 * 60 * 1000) return "active";       // < 5 min
-  if (diff < 60 * 60 * 1000) return "recent";       // < 1 hour
-  if (diff < 24 * 60 * 60 * 1000) return "idle";    // < 24 hours
-  return "old";
-}
-
-const STATUS_CONFIG: Record<SessionStatus, { color: string; bg: string; border: string; glow: string; label: string; icon: typeof Zap }> = {
-  active:  { color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/50", glow: "shadow-emerald-500/25 shadow-lg", label: "Active", icon: Zap },
-  recent:  { color: "text-blue-400", bg: "bg-blue-500/20", border: "border-blue-500/40", glow: "", label: "Recent", icon: Clock },
-  idle:    { color: "text-amber-400", bg: "bg-amber-500/15", border: "border-amber-500/30", glow: "", label: "Idle", icon: Moon },
-  old:     { color: "text-zinc-500", bg: "bg-zinc-500/10", border: "border-zinc-500/20", glow: "", label: "Archived", icon: Archive },
+const STATUS_CONFIG: Record<SessionStatus, {
+  dot: string; bg: string; border: string; glow: string;
+  label: string; icon: typeof Zap; animation?: string;
+}> = {
+  reading:   { dot: "bg-cyan-400",    bg: "bg-cyan-500/15",    border: "border-cyan-500/50",    glow: "shadow-cyan-500/20 shadow-lg",    label: "Reading",   icon: Zap,     animation: "animate-pulse" },
+  thinking:  { dot: "bg-orange-400",  bg: "bg-orange-500/15",  border: "border-orange-500/50",  glow: "shadow-orange-500/20 shadow-lg",  label: "Thinking",  icon: Zap,     animation: "animate-ping" },
+  writing:   { dot: "bg-purple-400",  bg: "bg-purple-500/15",  border: "border-purple-500/50",  glow: "shadow-purple-500/20 shadow-lg",  label: "Writing",   icon: Zap,     animation: "animate-pulse" },
+  waiting:   { dot: "bg-yellow-400",  bg: "bg-yellow-500/12",  border: "border-yellow-500/40",  glow: "shadow-yellow-500/15 shadow-md",  label: "Waiting",   icon: Moon,    animation: "animate-[pulse_2s_ease-in-out_infinite]" },
+  completed: { dot: "bg-green-400",   bg: "bg-green-500/12",   border: "border-green-500/35",   glow: "",                                label: "Completed", icon: Clock },
+  error:     { dot: "bg-red-500",     bg: "bg-red-500/15",     border: "border-red-500/50",     glow: "shadow-red-500/20 shadow-md",     label: "Error",     icon: Archive, animation: "animate-pulse" },
+  idle:      { dot: "bg-zinc-500",    bg: "bg-zinc-500/8",     border: "border-zinc-500/20",    glow: "",                                label: "Idle",      icon: Archive },
 };
 
 const MODEL_COLORS: Record<string, string> = {
@@ -106,8 +105,8 @@ const MODEL_COLORS: Record<string, string> = {
 // ---- Session Grid Block ----
 
 function SessionBlock({ session, onClick }: { session: SessionInfo; onClick: () => void }) {
-  const status = getSessionStatus(session.lastActive);
-  const cfg = STATUS_CONFIG[status];
+  const status = (session.status || "idle") as SessionStatus;
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
   const model = shortModel(session.model);
   const modelColor = MODEL_COLORS[model] || "bg-zinc-500";
 
@@ -121,12 +120,8 @@ function SessionBlock({ session, onClick }: { session: SessionInfo; onClick: () 
       `}
       title={`${session.firstMessage || session.id.slice(0, 12)}\n${session.projectName}\n${timeAgo(session.lastActive)}`}
     >
-      {/* Status indicator dot */}
-      <div className={`absolute top-2 right-2 h-2 w-2 rounded-full ${
-        status === "active" ? "bg-emerald-400 animate-pulse" :
-        status === "recent" ? "bg-blue-400" :
-        status === "idle" ? "bg-amber-400" : "bg-zinc-500"
-      }`} />
+      {/* Status indicator dot with animation */}
+      <div className={`absolute top-2 right-2 h-2.5 w-2.5 rounded-full ${cfg.dot} ${cfg.animation || ""}`} />
 
       {/* Model color bar */}
       <div className={`h-1 w-8 rounded-full ${modelColor} mb-2 opacity-70`} />
@@ -155,6 +150,9 @@ function SessionBlock({ session, onClick }: { session: SessionInfo; onClick: () 
           <div className="flex items-center gap-1.5 text-[10px]">
             {model && <Badge variant="secondary" className="text-[9px] h-4 px-1">{model}</Badge>}
             <Badge variant="outline" className="text-[9px] h-4 px-1">{session.messageCount} msgs</Badge>
+            <Badge variant="outline" className={`text-[9px] h-4 px-1 ${cfg.dot.replace("bg-", "text-").replace("-400", "-500").replace("-500", "-600")}`}>
+              {cfg.label}
+            </Badge>
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>{formatDT(session.startTime)}</span>
@@ -172,24 +170,22 @@ function SessionBlock({ session, onClick }: { session: SessionInfo; onClick: () 
 // ---- Status Legend ----
 
 function StatusLegend({ sessions }: { sessions: SessionInfo[] }) {
-  const counts: Record<SessionStatus, number> = { active: 0, recent: 0, idle: 0, old: 0 };
+  const counts: Record<SessionStatus, number> = { reading: 0, thinking: 0, writing: 0, waiting: 0, completed: 0, error: 0, idle: 0 };
   for (const s of sessions) {
-    counts[getSessionStatus(s.lastActive)]++;
+    const st = (s.status || "idle") as SessionStatus;
+    counts[st] = (counts[st] || 0) + 1;
   }
 
+  const statusOrder: SessionStatus[] = ["reading", "thinking", "writing", "waiting", "completed", "error", "idle"];
+
   return (
-    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-      {(["active", "recent", "idle", "old"] as SessionStatus[]).map(status => {
+    <div className="flex items-center gap-2.5 text-xs text-muted-foreground flex-wrap">
+      {statusOrder.map(status => {
+        if (counts[status] === 0) return null;
         const cfg = STATUS_CONFIG[status];
-        const Icon = cfg.icon;
         return (
           <div key={status} className="flex items-center gap-1">
-            <div className={`h-2.5 w-2.5 rounded-full ${
-              status === "active" ? "bg-emerald-400" :
-              status === "recent" ? "bg-blue-400" :
-              status === "idle" ? "bg-amber-400" : "bg-zinc-500"
-            }`} />
-            <Icon className="h-3 w-3" />
+            <div className={`h-2.5 w-2.5 rounded-full ${cfg.dot} ${cfg.animation || ""}`} />
             <span>{cfg.label}</span>
             <span className="font-mono">({counts[status]})</span>
           </div>
@@ -268,16 +264,13 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
       ) : (
         <div className="space-y-1.5">
           {sessions.map(s => {
-            const status = getSessionStatus(s.lastActive);
+            const status = (s.status || "idle") as SessionStatus;
+            const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
             return (
               <Card key={`${s.project}-${s.id}`} className="cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
                 onClick={() => onSelect(s.project, s.id)}>
                 <CardContent className="py-2.5 flex items-center gap-3">
-                  <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${
-                    status === "active" ? "bg-emerald-400 animate-pulse" :
-                    status === "recent" ? "bg-blue-400" :
-                    status === "idle" ? "bg-amber-400" : "bg-zinc-500"
-                  }`} />
+                  <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${cfg.dot} ${cfg.animation || ""}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">{s.firstMessage || s.id.slice(0, 12)}</div>
                     <div className="text-xs text-muted-foreground">{formatDT(s.startTime)} · {timeAgo(s.lastActive)} · {s.projectName}</div>

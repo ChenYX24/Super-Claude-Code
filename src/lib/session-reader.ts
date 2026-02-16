@@ -26,6 +26,15 @@ function estimateCost(model: string, input: number, output: number): number {
 
 // ---- Types ----
 
+export type SessionStatus =
+  | "reading"    // Last action: reading files (cyan)
+  | "thinking"   // Last action: assistant responding (orange)
+  | "writing"    // Last action: writing/editing files (purple)
+  | "waiting"    // Waiting for user input (yellow)
+  | "completed"  // Finished normally (green)
+  | "error"      // Error state (red)
+  | "idle";      // Inactive/old (gray)
+
 export interface SessionInfo {
   id: string;
   project: string;
@@ -39,6 +48,7 @@ export interface SessionInfo {
   totalOutputTokens: number;
   cacheReadTokens: number;
   estimatedCost: number;
+  status: SessionStatus;
 }
 
 export interface SessionMessage {
@@ -127,7 +137,59 @@ export function listProjects(): ProjectInfo[] {
   return projects.sort((a, b) => b.lastActive - a.lastActive);
 }
 
-// ---- Session listing (reads headers only for speed) ----
+// ---- Session Status Detection ----
+
+const WRITE_TOOLS = new Set(["Write", "Edit", "NotebookEdit"]);
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "WebFetch", "WebSearch"]);
+
+function detectSessionStatus(
+  lastActive: number,
+  lines: string[],
+): SessionStatus {
+  const age = Date.now() - lastActive;
+  const isRecent = age < 5 * 60 * 1000;    // < 5 min
+  const isWarm = age < 60 * 60 * 1000;     // < 1 hour
+
+  // Analyze last few lines for state
+  const tail = lines.slice(-5);
+  let lastRole = "";
+  let lastToolNames: string[] = [];
+  let hasError = false;
+
+  for (const line of tail) {
+    try {
+      const obj = JSON.parse(sanitize(line));
+      if (obj.type === "user") lastRole = "user";
+      else if (obj.type === "assistant") {
+        lastRole = "assistant";
+        lastToolNames = [];
+        if (Array.isArray(obj.message?.content)) {
+          for (const block of obj.message.content) {
+            if (block.type === "tool_use") lastToolNames.push(block.name);
+          }
+        }
+      }
+      // Detect error indicators
+      if (obj.type === "assistant" && obj.message?.stop_reason === "error") hasError = true;
+      if (obj.type === "result" && obj.error) hasError = true;
+    } catch { /* skip */ }
+  }
+
+  if (hasError && isWarm) return "error";
+
+  if (isRecent) {
+    if (lastRole === "user") return "waiting";
+    if (lastToolNames.some(t => WRITE_TOOLS.has(t))) return "writing";
+    if (lastToolNames.some(t => READ_TOOLS.has(t))) return "reading";
+    if (lastRole === "assistant") return "thinking";
+    return "waiting";
+  }
+
+  if (isWarm) return "completed";
+  return "idle";
+}
+
+// ---- Session listing (reads headers + tail for status) ----
 
 export function listSessions(projectPath: string): SessionInfo[] {
   const projectDir = path.join(PROJECTS_DIR, projectPath);
@@ -150,17 +212,18 @@ export function listSessions(projectPath: string): SessionInfo[] {
       let totalInput = 0;
       let totalOutput = 0;
       let cacheRead = 0;
+      let status: SessionStatus = "idle";
 
       try {
         const stat = fs.statSync(filePath);
         startTime = stat.birthtimeMs || stat.ctimeMs;
         lastActive = stat.mtimeMs;
 
-        // Read first few lines for metadata
         const content = fs.readFileSync(filePath, "utf-8");
         const lines = content.split("\n").filter((l) => l.trim());
         messageCount = lines.length;
 
+        // Read first few lines for metadata
         for (const line of lines.slice(0, 30)) {
           try {
             const obj = JSON.parse(sanitize(line));
@@ -181,6 +244,9 @@ export function listSessions(projectPath: string): SessionInfo[] {
             }
           } catch { /* skip */ }
         }
+
+        // Detect status from tail
+        status = detectSessionStatus(lastActive, lines);
       } catch { /* skip */ }
 
       sessions.push({
@@ -189,6 +255,7 @@ export function listSessions(projectPath: string): SessionInfo[] {
         totalInputTokens: totalInput, totalOutputTokens: totalOutput,
         cacheReadTokens: cacheRead,
         estimatedCost: estimateCost(model, totalInput, totalOutput),
+        status,
       });
     }
   } catch { /* skip */ }
