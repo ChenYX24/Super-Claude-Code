@@ -8,6 +8,7 @@ import {
   Clock, FolderOpen, Hash, RefreshCw, ArrowLeft, User, Bot,
   Wrench, Brain, ChevronDown, ChevronRight, Coins, MessageSquare,
   ChevronsUp, ChevronsDown, MapPin, FileText, DollarSign,
+  LayoutGrid, List, Zap, Moon, Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -77,15 +78,156 @@ function shortModel(m?: string) {
   return m;
 }
 
-// ---- Session List ----
+// ---- Session Status ----
+
+type SessionStatus = "active" | "recent" | "idle" | "old";
+
+function getSessionStatus(lastActive: number): SessionStatus {
+  const diff = Date.now() - lastActive;
+  if (diff < 5 * 60 * 1000) return "active";       // < 5 min
+  if (diff < 60 * 60 * 1000) return "recent";       // < 1 hour
+  if (diff < 24 * 60 * 60 * 1000) return "idle";    // < 24 hours
+  return "old";
+}
+
+const STATUS_CONFIG: Record<SessionStatus, { color: string; bg: string; border: string; glow: string; label: string; icon: typeof Zap }> = {
+  active:  { color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/50", glow: "shadow-emerald-500/25 shadow-lg", label: "Active", icon: Zap },
+  recent:  { color: "text-blue-400", bg: "bg-blue-500/20", border: "border-blue-500/40", glow: "", label: "Recent", icon: Clock },
+  idle:    { color: "text-amber-400", bg: "bg-amber-500/15", border: "border-amber-500/30", glow: "", label: "Idle", icon: Moon },
+  old:     { color: "text-zinc-500", bg: "bg-zinc-500/10", border: "border-zinc-500/20", glow: "", label: "Archived", icon: Archive },
+};
+
+const MODEL_COLORS: Record<string, string> = {
+  Opus: "bg-purple-500",
+  Sonnet: "bg-blue-500",
+  Haiku: "bg-teal-500",
+};
+
+// ---- Session Grid Block ----
+
+function SessionBlock({ session, onClick }: { session: SessionInfo; onClick: () => void }) {
+  const status = getSessionStatus(session.lastActive);
+  const cfg = STATUS_CONFIG[status];
+  const model = shortModel(session.model);
+  const modelColor = MODEL_COLORS[model] || "bg-zinc-500";
+
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        relative group rounded-lg border p-3 text-left transition-all duration-200
+        hover:scale-[1.03] hover:shadow-md cursor-pointer
+        ${cfg.bg} ${cfg.border} ${cfg.glow}
+      `}
+      title={`${session.firstMessage || session.id.slice(0, 12)}\n${session.projectName}\n${timeAgo(session.lastActive)}`}
+    >
+      {/* Status indicator dot */}
+      <div className={`absolute top-2 right-2 h-2 w-2 rounded-full ${
+        status === "active" ? "bg-emerald-400 animate-pulse" :
+        status === "recent" ? "bg-blue-400" :
+        status === "idle" ? "bg-amber-400" : "bg-zinc-500"
+      }`} />
+
+      {/* Model color bar */}
+      <div className={`h-1 w-8 rounded-full ${modelColor} mb-2 opacity-70`} />
+
+      {/* Content */}
+      <div className="text-xs font-medium truncate leading-tight mb-1 text-foreground/90">
+        {session.firstMessage ? session.firstMessage.slice(0, 40) : session.id.slice(0, 10)}
+      </div>
+      <div className="text-[10px] text-muted-foreground truncate">
+        {session.projectName.length > 18 ? "..." + session.projectName.slice(-16) : session.projectName}
+      </div>
+
+      {/* Footer: time + cost */}
+      <div className="flex items-center justify-between mt-2 text-[10px] text-muted-foreground">
+        <span>{timeAgo(session.lastActive)}</span>
+        <span className="font-mono">{fmtCost(session.estimatedCost)}</span>
+      </div>
+
+      {/* Hover overlay with more detail */}
+      <div className="absolute inset-0 rounded-lg bg-background/95 opacity-0 group-hover:opacity-100 transition-opacity duration-150 p-3 flex flex-col justify-between pointer-events-none">
+        <div>
+          <div className="text-xs font-semibold truncate mb-1">{session.firstMessage || session.id.slice(0, 16)}</div>
+          <div className="text-[10px] text-muted-foreground">{session.projectName}</div>
+        </div>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5 text-[10px]">
+            {model && <Badge variant="secondary" className="text-[9px] h-4 px-1">{model}</Badge>}
+            <Badge variant="outline" className="text-[9px] h-4 px-1">{session.messageCount} msgs</Badge>
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>{formatDT(session.startTime)}</span>
+            <span className="font-mono font-medium">{fmtCost(session.estimatedCost)}</span>
+          </div>
+          <div className="text-[10px] font-mono text-muted-foreground">
+            {fmtTokens(session.totalInputTokens)}in / {fmtTokens(session.totalOutputTokens)}out
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ---- Status Legend ----
+
+function StatusLegend({ sessions }: { sessions: SessionInfo[] }) {
+  const counts: Record<SessionStatus, number> = { active: 0, recent: 0, idle: 0, old: 0 };
+  for (const s of sessions) {
+    counts[getSessionStatus(s.lastActive)]++;
+  }
+
+  return (
+    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+      {(["active", "recent", "idle", "old"] as SessionStatus[]).map(status => {
+        const cfg = STATUS_CONFIG[status];
+        const Icon = cfg.icon;
+        return (
+          <div key={status} className="flex items-center gap-1">
+            <div className={`h-2.5 w-2.5 rounded-full ${
+              status === "active" ? "bg-emerald-400" :
+              status === "recent" ? "bg-blue-400" :
+              status === "idle" ? "bg-amber-400" : "bg-zinc-500"
+            }`} />
+            <Icon className="h-3 w-3" />
+            <span>{cfg.label}</span>
+            <span className="font-mono">({counts[status]})</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---- Session List (supports list + grid view) ----
 
 function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: string, id: string) => void }) {
   const [filter, setFilter] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const sessions = filter ? data.recentSessions.filter(s => s.project === filter) : data.recentSessions;
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">Sessions</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Sessions</h1>
+        <div className="flex items-center gap-1 border rounded-lg p-0.5">
+          <Button
+            variant={viewMode === "grid" ? "default" : "ghost"}
+            size="sm" className="h-7 w-7 p-0"
+            onClick={() => setViewMode("grid")}
+          >
+            <LayoutGrid className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant={viewMode === "list" ? "default" : "ghost"}
+            size="sm" className="h-7 w-7 p-0"
+            onClick={() => setViewMode("list")}
+          >
+            <List className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
           { icon: FolderOpen, label: "Projects", value: data.projects.length },
@@ -100,37 +242,59 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Badge variant={filter === "" ? "default" : "outline"} className="cursor-pointer" onClick={() => setFilter("")}>All</Badge>
-        {data.projects.map(p => (
-          <Badge key={p.path} variant={filter === p.path ? "default" : "outline"} className="cursor-pointer"
-            onClick={() => setFilter(filter === p.path ? "" : p.path)}>
-            {p.name.length > 20 ? "..." + p.name.slice(-18) : p.name} ({p.sessionCount})
-          </Badge>
-        ))}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex flex-wrap gap-2">
+          <Badge variant={filter === "" ? "default" : "outline"} className="cursor-pointer" onClick={() => setFilter("")}>All</Badge>
+          {data.projects.map(p => (
+            <Badge key={p.path} variant={filter === p.path ? "default" : "outline"} className="cursor-pointer"
+              onClick={() => setFilter(filter === p.path ? "" : p.path)}>
+              {p.name.length > 20 ? "..." + p.name.slice(-18) : p.name} ({p.sessionCount})
+            </Badge>
+          ))}
+        </div>
+        {viewMode === "grid" && <StatusLegend sessions={sessions} />}
       </div>
 
-      <div className="space-y-1.5">
-        {sessions.map(s => (
-          <Card key={`${s.project}-${s.id}`} className="cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
-            onClick={() => onSelect(s.project, s.id)}>
-            <CardContent className="py-2.5 flex items-center gap-3">
-              <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{s.firstMessage || s.id.slice(0, 12)}</div>
-                <div className="text-xs text-muted-foreground">{formatDT(s.startTime)} · {timeAgo(s.lastActive)} · {s.projectName}</div>
-              </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {s.model && <Badge variant="secondary" className="text-xs">{shortModel(s.model)}</Badge>}
-                <Badge variant="outline" className="text-xs font-mono">
-                  <DollarSign className="h-3 w-3 mr-0.5" />{fmtCost(s.estimatedCost)}
-                </Badge>
-                <Badge variant="outline" className="text-xs">{s.messageCount} lines</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {viewMode === "grid" ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          {sessions.map(s => (
+            <SessionBlock
+              key={`${s.project}-${s.id}`}
+              session={s}
+              onClick={() => onSelect(s.project, s.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {sessions.map(s => {
+            const status = getSessionStatus(s.lastActive);
+            return (
+              <Card key={`${s.project}-${s.id}`} className="cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
+                onClick={() => onSelect(s.project, s.id)}>
+                <CardContent className="py-2.5 flex items-center gap-3">
+                  <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${
+                    status === "active" ? "bg-emerald-400 animate-pulse" :
+                    status === "recent" ? "bg-blue-400" :
+                    status === "idle" ? "bg-amber-400" : "bg-zinc-500"
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{s.firstMessage || s.id.slice(0, 12)}</div>
+                    <div className="text-xs text-muted-foreground">{formatDT(s.startTime)} · {timeAgo(s.lastActive)} · {s.projectName}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {s.model && <Badge variant="secondary" className="text-xs">{shortModel(s.model)}</Badge>}
+                    <Badge variant="outline" className="text-xs font-mono">
+                      <DollarSign className="h-3 w-3 mr-0.5" />{fmtCost(s.estimatedCost)}
+                    </Badge>
+                    <Badge variant="outline" className="text-xs">{s.messageCount} lines</Badge>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

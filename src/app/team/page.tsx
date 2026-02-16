@@ -204,19 +204,24 @@ function AgentItem({
 
 function MessageBubble({
   msg,
-  isExpanded,
-  onToggle,
+  isSelected,
+  onSelect,
 }: {
   msg: TeamMessage;
-  isExpanded: boolean;
-  onToggle: () => void;
+  isSelected: boolean;
+  onSelect: () => void;
 }) {
   const style = getAgentStyle("", msg.from);
   const Icon = style.icon;
   const isLong = msg.text.length > 300;
 
   return (
-    <div className="flex gap-3 py-3 px-4 hover:bg-muted/20 transition-colors">
+    <div
+      className={`flex gap-3 py-3 px-4 transition-colors cursor-pointer ${
+        isSelected ? "bg-primary/5 border-l-2 border-l-primary" : "hover:bg-muted/20"
+      }`}
+      onClick={onSelect}
+    >
       <div
         className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${style.bg}`}
       >
@@ -240,33 +245,76 @@ function MessageBubble({
             {msg.summary}
           </div>
         )}
-        <div
-          className={
-            !isExpanded && isLong
-              ? "max-h-32 overflow-hidden relative"
-              : ""
-          }
-        >
+        <div className={isLong ? "max-h-24 overflow-hidden relative" : ""}>
           <MarkdownContent content={msg.text} className="text-sm" />
-          {!isExpanded && isLong && (
-            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-background to-transparent" />
+          {isLong && (
+            <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-background to-transparent" />
           )}
         </div>
         {isLong && (
-          <button
-            onClick={onToggle}
-            className="text-xs text-primary hover:underline mt-1 flex items-center gap-1"
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-3 w-3" />
-            ) : (
-              <ChevronRight className="h-3 w-3" />
-            )}
-            {isExpanded
-              ? "Collapse"
-              : `Expand (${Math.ceil(msg.text.length / 100)} paragraphs)`}
-          </button>
+          <div className="text-xs text-primary/60 mt-1 flex items-center gap-1">
+            <ChevronRight className="h-3 w-3" />
+            Click to read full message
+          </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ---- Message Detail Panel (right side) ----
+
+function MessageDetailPanel({
+  msg,
+  onClose,
+}: {
+  msg: TeamMessage;
+  onClose: () => void;
+}) {
+  const style = getAgentStyle("", msg.from);
+  const Icon = style.icon;
+
+  return (
+    <div className="w-[45%] border-l flex flex-col bg-muted/5">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b flex-shrink-0">
+        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${style.bg}`}>
+          <Icon className={`h-4 w-4 ${style.color}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold">{msg.from}</span>
+            {msg.to && (
+              <>
+                <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">{msg.to}</span>
+              </>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground">{formatTime(msg.timestamp)}</div>
+        </div>
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onClose}>
+          ×
+        </Button>
+      </div>
+
+      {/* Summary badge */}
+      {msg.summary && (
+        <div className="px-4 py-2 border-b">
+          <div className="text-xs font-medium text-primary/80 px-2 py-1 bg-primary/5 rounded inline-block">
+            {msg.summary}
+          </div>
+        </div>
+      )}
+
+      {/* Full message content */}
+      <div className="flex-1 overflow-auto px-4 py-3">
+        <MarkdownContent content={msg.text} className="text-sm" />
+      </div>
+
+      {/* Footer: char count */}
+      <div className="px-4 py-1.5 border-t text-xs text-muted-foreground">
+        {msg.text.length} characters
       </div>
     </div>
   );
@@ -431,7 +479,7 @@ export default function TeamPage() {
   const [teamData, setTeamData] = useState<TeamData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedAgent, setSelectedAgent] = useState("");
-  const [expandedMsgs, setExpandedMsgs] = useState<Set<number>>(new Set());
+  const [selectedMsgIdx, setSelectedMsgIdx] = useState<number | null>(null);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"chat" | "tasks">("chat");
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -633,58 +681,65 @@ export default function TeamPage() {
 
         {/* Content */}
         {activeTab === "chat" ? (
-          <div className="flex-1 overflow-auto relative" ref={chatScrollRef}>
-            {filteredMsgs.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                No messages yet
-              </div>
-            ) : (
-              <div className="divide-y divide-border/50">
-                {filteredMsgs.map((msg, i) => (
-                  <MessageBubble
-                    key={i}
-                    msg={msg}
-                    isExpanded={expandedMsgs.has(i)}
-                    onToggle={() => {
-                      const s = new Set(expandedMsgs);
-                      s.has(i) ? s.delete(i) : s.add(i);
-                      setExpandedMsgs(s);
-                    }}
-                  />
-                ))}
-                <div ref={chatEndRef} />
-              </div>
-            )}
+          <div className="flex-1 flex overflow-hidden">
+            {/* Message list */}
+            <div className={`${selectedMsgIdx !== null ? "w-[55%]" : "flex-1"} overflow-auto relative`} ref={chatScrollRef}>
+              {filteredMsgs.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                  No messages yet
+                </div>
+              ) : (
+                <div className="divide-y divide-border/50">
+                  {filteredMsgs.map((msg, i) => (
+                    <MessageBubble
+                      key={i}
+                      msg={msg}
+                      isSelected={selectedMsgIdx === i}
+                      onSelect={() => setSelectedMsgIdx(selectedMsgIdx === i ? null : i)}
+                    />
+                  ))}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
 
-            {/* Floating scroll controls - right side */}
-            {filteredMsgs.length > 5 && (
-              <div className="sticky bottom-4 float-right mr-4 flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0 shadow-md bg-background"
-                  onClick={() =>
-                    chatScrollRef.current?.scrollTo({
-                      top: 0,
-                      behavior: "smooth",
-                    })
-                  }
-                >
-                  <ChevronsUp className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-8 p-0 shadow-md bg-background"
-                  onClick={() =>
-                    chatEndRef.current?.scrollIntoView({
-                      behavior: "smooth",
-                    })
-                  }
-                >
-                  <ChevronsDown className="h-4 w-4" />
-                </Button>
-              </div>
+              {/* Floating scroll controls - right side */}
+              {filteredMsgs.length > 5 && (
+                <div className="sticky bottom-4 float-right mr-4 flex flex-col gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 shadow-md bg-background"
+                    onClick={() =>
+                      chatScrollRef.current?.scrollTo({
+                        top: 0,
+                        behavior: "smooth",
+                      })
+                    }
+                  >
+                    <ChevronsUp className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 shadow-md bg-background"
+                    onClick={() =>
+                      chatEndRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                      })
+                    }
+                  >
+                    <ChevronsDown className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Right-side message detail panel */}
+            {selectedMsgIdx !== null && filteredMsgs[selectedMsgIdx] && (
+              <MessageDetailPanel
+                msg={filteredMsgs[selectedMsgIdx]}
+                onClose={() => setSelectedMsgIdx(null)}
+              />
             )}
           </div>
         ) : (
