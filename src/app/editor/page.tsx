@@ -138,6 +138,28 @@ export default function EditorPage() {
     setSelectedFile(newPath);
   };
 
+  // Open an existing file by path (register it if not in list)
+  const openFilePath = async (filePath: string) => {
+    // Check if already in file list
+    const existing = files.find((f) => f.path === filePath);
+    if (existing) {
+      setSelectedFile(filePath);
+      return;
+    }
+    // Register the file via API so it appears in future lists
+    await fetch("/api/claudemd/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: filePath }),
+    });
+    // Reload file list
+    const listRes = await fetch("/api/claudemd");
+    const listData = await listRes.json();
+    setFiles(listData.files || []);
+    setProjects(listData.projects || []);
+    setSelectedFile(filePath);
+  };
+
   // Create from project preset
   const handleCreateFromProject = async (projectEncoded: string) => {
     setCreating(true);
@@ -365,19 +387,36 @@ export default function EditorPage() {
                         )}
                       </div>
 
-                      {/* Create here + Go up / Drives buttons */}
+                      {/* Create here / Open + Go up / Drives buttons */}
                       {!browseIsDriveList && (
                         <div className="px-3 py-2 border-b flex gap-2">
-                          <Button
-                            size="sm"
-                            variant={browseHasClaudeMd ? "outline" : "default"}
-                            disabled={creating || browseHasClaudeMd}
-                            onClick={() => handleCreateAtPath(browsePath)}
-                            className="flex-1 text-xs"
-                          >
-                            <FolderPlus className="h-3.5 w-3.5 mr-1" />
-                            {browseHasClaudeMd ? "Already exists" : "Create here"}
-                          </Button>
+                          {browseHasClaudeMd ? (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => {
+                                const sep = browsePath.includes("/") ? "/" : "\\";
+                                const claudeMdPath = browsePath.replace(/[/\\]$/, "") + sep + "CLAUDE.md";
+                                openFilePath(claudeMdPath);
+                                setShowCreateDialog(false);
+                              }}
+                              className="flex-1 text-xs"
+                            >
+                              <FileText className="h-3.5 w-3.5 mr-1" />
+                              Open existing
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              disabled={creating}
+                              onClick={() => handleCreateAtPath(browsePath)}
+                              className="flex-1 text-xs"
+                            >
+                              <FolderPlus className="h-3.5 w-3.5 mr-1" />
+                              Create here
+                            </Button>
+                          )}
                           {browseParent ? (
                             <Button
                               size="sm"

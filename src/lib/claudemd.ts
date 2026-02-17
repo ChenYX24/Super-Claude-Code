@@ -8,6 +8,7 @@ import os from "os";
 
 const CLAUDE_DIR = path.join(os.homedir(), ".claude");
 const PROJECTS_DIR = path.join(CLAUDE_DIR, "projects");
+const REGISTRY_FILE = path.join(CLAUDE_DIR, "claudemd-registry.json");
 
 // ---- Types ----
 
@@ -38,15 +39,50 @@ function decodeProjectPath(encoded: string): string {
   return "/" + encoded.replace(/-/g, "/");
 }
 
+// ---- Registry (tracks custom-created CLAUDE.md files) ----
+
+function readRegistry(): string[] {
+  try {
+    if (fs.existsSync(REGISTRY_FILE)) {
+      return JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf-8"));
+    }
+  } catch { /* skip */ }
+  return [];
+}
+
+function writeRegistry(paths: string[]): void {
+  try {
+    fs.writeFileSync(REGISTRY_FILE, JSON.stringify(paths, null, 2), "utf-8");
+  } catch { /* skip */ }
+}
+
+function addToRegistry(filePath: string): void {
+  const registry = readRegistry();
+  if (!registry.includes(filePath)) {
+    registry.push(filePath);
+    writeRegistry(registry);
+  }
+}
+
+function removeFromRegistry(filePath: string): void {
+  const registry = readRegistry();
+  const filtered = registry.filter((p) => p !== filePath);
+  if (filtered.length !== registry.length) {
+    writeRegistry(filtered);
+  }
+}
+
 // ---- Public Functions ----
 
 export function listClaudeMdFiles(): ClaudeMdFile[] {
   const files: ClaudeMdFile[] = [];
+  const seenPaths = new Set<string>();
 
   // 1. 全局 CLAUDE.md
   const globalPath = path.join(CLAUDE_DIR, "CLAUDE.md");
   if (fs.existsSync(globalPath)) {
     files.push({ path: globalPath, label: "Global", scope: "global" });
+    seenPaths.add(globalPath);
   }
 
   // 2. 项目级 CLAUDE.md
@@ -69,6 +105,7 @@ export function listClaudeMdFiles(): ClaudeMdFile[] {
             label: `Project: ${decoded}`,
             scope: "project",
           });
+          seenPaths.add(projectClaudemd);
           continue;
         }
 
@@ -82,6 +119,7 @@ export function listClaudeMdFiles(): ClaudeMdFile[] {
               label: `Project: ${realProjectPath}`,
               scope: "project",
             });
+            seenPaths.add(realClaudemd);
           }
         } catch {
           // skip invalid paths
@@ -89,6 +127,20 @@ export function listClaudeMdFiles(): ClaudeMdFile[] {
       }
     } catch {
       // skip
+    }
+  }
+
+  // 3. Custom-registered CLAUDE.md files
+  const registry = readRegistry();
+  for (const regPath of registry) {
+    if (!seenPaths.has(regPath) && fs.existsSync(regPath)) {
+      const dirName = path.basename(path.dirname(regPath));
+      files.push({
+        path: regPath,
+        label: `Custom: ${dirName}`,
+        scope: "project",
+      });
+      seenPaths.add(regPath);
     }
   }
 
@@ -219,10 +271,25 @@ export function deleteClaudeMdFile(filePath: string): { success: boolean; error?
   }
   try {
     fs.unlinkSync(filePath);
+    removeFromRegistry(filePath);
     return { success: true };
   } catch {
     return { success: false, error: "Failed to delete file" };
   }
+}
+
+/**
+ * 注册一个已存在的 CLAUDE.md 文件到 registry
+ */
+export function registerClaudeMdFile(filePath: string): { success: boolean; error?: string } {
+  if (!filePath.endsWith("CLAUDE.md")) {
+    return { success: false, error: "Can only register CLAUDE.md files" };
+  }
+  if (!fs.existsSync(filePath)) {
+    return { success: false, error: "File does not exist" };
+  }
+  addToRegistry(filePath);
+  return { success: true };
 }
 
 /**
@@ -243,5 +310,8 @@ export function createClaudeMdAtPath(dirPath: string): { success: boolean; path:
   const dirName = path.basename(dirPath) || dirPath;
   const template = `# ${dirName}\n\n## Project Instructions\n\n`;
   const ok = writeClaudeMdContent(targetPath, template);
+  if (ok) {
+    addToRegistry(targetPath);
+  }
   return { success: ok, path: targetPath };
 }

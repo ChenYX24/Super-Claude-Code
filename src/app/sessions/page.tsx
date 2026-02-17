@@ -219,12 +219,15 @@ function StatusLegend({ sessions }: { sessions: SessionInfo[] }) {
 
 // ---- Session List (supports list + grid view) ----
 
-function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: string, id: string) => void }) {
+const PAGE_SIZE = 24;
+
+function SessionList({ data, onSelect, onRefresh, refreshing }: { data: SessionsData; onSelect: (p: string, id: string) => void; onRefresh?: () => void; refreshing?: boolean }) {
   const [filter, setFilter] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "cost" | "messages">("date");
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Debounce search input
   useEffect(() => {
@@ -260,10 +263,29 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
     return sorted;
   }, [data.recentSessions, filter, debouncedSearch, sortBy]);
 
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedSessions = sessions.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+
+  // Reset page when filter/search changes
+  useEffect(() => { setCurrentPage(1); }, [filter, debouncedSearch, sortBy]);
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Sessions</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Sessions</h1>
+          {onRefresh && (
+            <Button variant="outline" size="sm" className="h-8 w-8 p-0" onClick={onRefresh} disabled={refreshing}>
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            </Button>
+          )}
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+            Auto-refresh
+          </div>
+        </div>
         <div className="flex items-center gap-1 border rounded-lg p-0.5">
           <Button
             variant={viewMode === "grid" ? "default" : "ghost"}
@@ -346,7 +368,7 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
 
       {viewMode === "grid" ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-          {sessions.map(s => (
+          {paginatedSessions.map(s => (
             <SessionBlock
               key={`${s.project}-${s.id}`}
               session={s}
@@ -357,7 +379,7 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
         </div>
       ) : (
         <div className="space-y-1.5">
-          {sessions.map(s => {
+          {paginatedSessions.map(s => {
             const status = (s.status || "idle") as SessionStatus;
             const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
             return (
@@ -385,6 +407,54 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button
+            variant="outline" size="sm" className="text-xs h-8"
+            disabled={safeCurrentPage <= 1}
+            onClick={() => setCurrentPage(safeCurrentPage - 1)}
+          >
+            Previous
+          </Button>
+          <div className="flex items-center gap-1">
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+              let pageNum: number;
+              if (totalPages <= 7) {
+                pageNum = i + 1;
+              } else if (safeCurrentPage <= 4) {
+                pageNum = i + 1;
+              } else if (safeCurrentPage >= totalPages - 3) {
+                pageNum = totalPages - 6 + i;
+              } else {
+                pageNum = safeCurrentPage - 3 + i;
+              }
+              return (
+                <Button
+                  key={pageNum}
+                  variant={pageNum === safeCurrentPage ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 w-8 p-0 text-xs"
+                  onClick={() => setCurrentPage(pageNum)}
+                >
+                  {pageNum}
+                </Button>
+              );
+            })}
+          </div>
+          <Button
+            variant="outline" size="sm" className="text-xs h-8"
+            disabled={safeCurrentPage >= totalPages}
+            onClick={() => setCurrentPage(safeCurrentPage + 1)}
+          >
+            Next
+          </Button>
+          <span className="text-xs text-muted-foreground ml-2">
+            {sessions.length} sessions
+          </span>
         </div>
       )}
     </div>
@@ -432,7 +502,7 @@ const DEFAULT_TOOL_CONFIG = {
 
 // ---- Conversation Message ----
 
-function ConvMessage({ msg, showTools }: { msg: SessionMessage; showTools: boolean }) {
+function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch }: { msg: SessionMessage; showTools: boolean; searchHighlight?: string; isSearchMatch?: boolean }) {
   const [thinkingExpanded, setThinkingExpanded] = useState(false);
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const isUser = msg.role === "user";
@@ -462,8 +532,8 @@ function ConvMessage({ msg, showTools }: { msg: SessionMessage; showTools: boole
   };
 
   return (
-    <div className={`flex gap-3 py-3 px-4 ${isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}
-      id={msg.isCheckpoint ? `cp-${msg.uuid}` : undefined}>
+    <div className={`flex gap-3 py-3 px-4 ${isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : ""} ${isSearchMatch ? "ring-2 ring-yellow-400 dark:ring-yellow-600" : ""}`}
+      id={`msg-${msg.uuid}`}>
       <div className={`h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
         isUser ? "bg-blue-100 dark:bg-blue-900" : "bg-purple-100 dark:bg-purple-900"
       }`}>
@@ -632,6 +702,8 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
   const [showFiles, setShowFiles] = useState(false);
   const [previewFile, setPreviewFile] = useState<FilePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [convSearch, setConvSearch] = useState("");
+  const [convSearchMatch, setConvSearchMatch] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -647,7 +719,7 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
     if (!detail) return;
     const msg = detail.messages[idx];
     if (!msg) return;
-    const el = document.getElementById(`cp-${msg.uuid}`);
+    const el = document.getElementById(`msg-${msg.uuid}`);
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [detail]);
 
@@ -669,6 +741,34 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
       });
   }, []);
 
+  // Compute search matches (must be before early returns to keep hook order stable)
+  const allVisible = useMemo(() => {
+    if (!detail) return [];
+    return detail.messages.filter(m =>
+      (m.role === "user" || m.role === "assistant") && (m.content.trim() || (m.toolUse && m.toolUse.length > 0) || m.thinkingContent)
+    );
+  }, [detail]);
+
+  const convSearchLower = convSearch.trim().toLowerCase();
+  const matchedIndices = useMemo(() => {
+    if (!convSearchLower) return [];
+    return allVisible
+      .map((m, i) => (m.content.toLowerCase().includes(convSearchLower) ? i : -1))
+      .filter((i) => i !== -1);
+  }, [allVisible, convSearchLower]);
+
+  // Jump to matched message
+  useEffect(() => {
+    if (matchedIndices.length > 0 && convSearchMatch >= 0 && convSearchMatch < matchedIndices.length) {
+      const msgIdx = matchedIndices[convSearchMatch];
+      const msg = allVisible[msgIdx];
+      if (msg) {
+        const el = document.getElementById(`msg-${msg.uuid}`);
+        el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+  }, [convSearchMatch, convSearch, matchedIndices, allVisible]);
+
   if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (!detail) return (
     <div className="text-center py-16">
@@ -677,9 +777,7 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
     </div>
   );
 
-  const visible = detail.messages.filter(m =>
-    (m.role === "user" || m.role === "assistant") && (m.content.trim() || (m.toolUse && m.toolUse.length > 0) || m.thinkingContent)
-  );
+  const visible = allVisible;
 
   return (
     <div className="flex flex-col h-[calc(100vh-3rem)]">
@@ -712,6 +810,42 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
             {fmtTokens(detail.totalInputTokens)}in / {fmtTokens(detail.totalOutputTokens)}out
           </Badge>
         </div>
+      </div>
+
+      {/* Conversation search bar */}
+      <div className="border-b px-4 py-1.5 flex items-center gap-2 flex-shrink-0 bg-muted/10">
+        <Search className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+        <input
+          type="text"
+          placeholder="Search in conversation..."
+          value={convSearch}
+          onChange={(e) => { setConvSearch(e.target.value); setConvSearchMatch(0); }}
+          className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-muted-foreground/60"
+        />
+        {convSearchLower && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <span className="text-xs text-muted-foreground font-mono">
+              {matchedIndices.length > 0 ? `${convSearchMatch + 1}/${matchedIndices.length}` : "0/0"}
+            </span>
+            <Button
+              variant="ghost" size="sm" className="h-6 w-6 p-0"
+              disabled={matchedIndices.length === 0}
+              onClick={() => setConvSearchMatch((convSearchMatch - 1 + matchedIndices.length) % matchedIndices.length)}
+            >
+              <ChevronsUp className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost" size="sm" className="h-6 w-6 p-0"
+              disabled={matchedIndices.length === 0}
+              onClick={() => setConvSearchMatch((convSearchMatch + 1) % matchedIndices.length)}
+            >
+              <ChevronsDown className="h-3 w-3" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setConvSearch(""); setConvSearchMatch(0); }}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -755,7 +889,15 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
         {/* Conversation */}
         <div className={`${previewFile ? "w-1/2" : "flex-1"} overflow-auto relative`} ref={scrollRef}>
           <div className="divide-y divide-border/30">
-            {visible.map(msg => <ConvMessage key={msg.uuid} msg={msg} showTools={showTools} />)}
+            {visible.map((msg, i) => (
+              <ConvMessage
+                key={msg.uuid}
+                msg={msg}
+                showTools={showTools}
+                searchHighlight={convSearchLower}
+                isSearchMatch={convSearchLower ? matchedIndices[convSearchMatch] === i : false}
+              />
+            ))}
           </div>
 
           {/* Floating nav buttons - right side of conversation */}
@@ -814,14 +956,17 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
 function SessionsPageInner() {
   const [data, setData] = useState<SessionsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [active, setActive] = useState<{ project: string; id: string } | null>(null);
   const searchParams = useSearchParams();
   const deepLinked = useRef(false);
 
-  useEffect(() => {
+  const loadData = useCallback((isManual = false) => {
+    if (isManual) setRefreshing(true);
     fetch("/api/sessions").then(r => r.json()).then((d: SessionsData) => {
       setData(d);
       setLoading(false);
+      setRefreshing(false);
 
       // Deep-link: ?session=UUID auto-opens that session
       if (!deepLinked.current) {
@@ -834,13 +979,23 @@ function SessionsPageInner() {
           }
         }
       }
-    }).catch(() => setLoading(false));
+    }).catch(() => { setLoading(false); setRefreshing(false); });
   }, [searchParams]);
+
+  // Initial load
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Auto-refresh every 10s when on list view
+  useEffect(() => {
+    if (active) return;
+    const iv = setInterval(() => loadData(), 10000);
+    return () => clearInterval(iv);
+  }, [active, loadData]);
 
   if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   if (active) return <SessionDetailView projectPath={active.project} sessionId={active.id} onBack={() => setActive(null)} />;
   if (!data) return <div className="text-center py-16"><Clock className="h-12 w-12 mx-auto text-muted-foreground mb-4" /><h2 className="text-lg">No data</h2></div>;
-  return <SessionList data={data} onSelect={(p, id) => setActive({ project: p, id })} />;
+  return <SessionList data={data} onRefresh={() => loadData(true)} refreshing={refreshing} onSelect={(p, id) => setActive({ project: p, id })} />;
 }
 
 export default function SessionsPage() {

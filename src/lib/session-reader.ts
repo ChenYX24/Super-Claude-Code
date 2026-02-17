@@ -384,7 +384,7 @@ export interface ProjectsSummary {
 export function getProjectsSummary(): ProjectsSummary {
   const projects = listProjects();
   const totalSessions = projects.reduce((s, p) => s + p.sessionCount, 0);
-  const recentSessions = getRecentSessions(30);
+  const recentSessions = getRecentSessions(500);
   return { projects, totalSessions, recentSessions };
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/markdown-content";
 import {
@@ -482,7 +483,10 @@ function TeamSelector({
 
 // ---- Main Page ----
 
-export default function TeamPage() {
+function TeamPageInner() {
+  const searchParams = useSearchParams();
+  const urlTeamName = searchParams.get("name");
+
   const [teamList, setTeamList] = useState<TeamSummary | null>(null);
   const [activeTeam, setActiveTeam] = useState("");
   const [teamData, setTeamData] = useState<TeamData | null>(null);
@@ -494,17 +498,25 @@ export default function TeamPage() {
   const [showPastAgents, setShowPastAgents] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const initialTeamSet = useRef(false);
 
   useEffect(() => {
     fetch("/api/teams")
       .then((r) => r.json())
       .then((d: TeamSummary) => {
         setTeamList(d);
-        if (d.teams.length > 0 && !activeTeam) setActiveTeam(d.teams[0].name);
+        if (!initialTeamSet.current && d.teams.length > 0) {
+          // Use URL param if provided and valid, otherwise use first team
+          const target = urlTeamName && d.teams.some((t) => t.name === urlTeamName)
+            ? urlTeamName
+            : d.teams[0].name;
+          setActiveTeam(target);
+          initialTeamSet.current = true;
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [activeTeam]);
+  }, [urlTeamName]);
 
   useEffect(() => {
     if (!activeTeam) return;
@@ -873,5 +885,19 @@ export default function TeamPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function TeamPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-64">
+          <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <TeamPageInner />
+    </Suspense>
   );
 }
