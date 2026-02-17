@@ -131,37 +131,34 @@ dashboard/
 - [ ] **Telegram Bot** — Mobile control & notifications
 - [ ] **Docker Integration** — Automated task execution in isolated containers
 
-### Extra Toolkits
+### AI Toolbox (Auto-task Ecosystem)
 
-> Independent modules that extend the platform beyond Claude Code management.
+> Independent modules with a unified task intake — AI auto-dispatches and executes.
+
+#### Creative & Content Production
+- [ ] **Video Editing Service** — Receive footage + requirements, AI auto-edits/composes/subtitles
+- [ ] **Design Service** — Receive design briefs, AI generates posters/logos/UI mockups
+- [ ] **Video Info Extraction** — Extract metadata, transcripts, key frames
+- [ ] **Mobile Media Upload** — Send photos & videos from mobile, trigger pipelines
+
+#### Programming & Development
+- [ ] **Coding Service** — Receive requirements, AI auto-codes + tests + delivers
+- [ ] **Code Review Service** — Submit PR/snippets, AI generates review reports
+- [ ] **Bug Fix Service** — Describe issue + repo URL, AI locates and fixes
 
 #### Financial Market Analysis
-- [ ] **Precious Metals** — Real-time gold & silver price tracking, trend analysis
+- [ ] **Precious Metals** — Real-time gold & silver tracking, trend analysis
 - [ ] **Crypto** — Bitcoin and major crypto monitoring, alerts
-- [ ] **Stock Indices** — Major indices (S&P 500, NASDAQ, CSI 300, HSI) analysis & dashboards
-
-#### Video & Media Pipeline
-- [ ] **Video Info Extraction** — Extract metadata, transcripts, key frames from videos
-- [ ] **Video Generation** — AI-powered video content generation
-- [ ] **Video Editing** — Automated editing, clipping, compositing
-- [ ] **Mobile Media Upload** — Send photos & videos from mobile, trigger processing pipelines
+- [ ] **Stock Indices** — S&P 500, NASDAQ, CSI 300, HSI dashboards
 
 #### Multi-Platform Content Hub
-- [ ] **GitHub Integration** — Repo tracking, star/fork alerts, release monitoring
-- [ ] **Xiaohongshu (RED)** — Content management, trend analysis, auto-publish
-- [ ] **Hugging Face** — Model & dataset tracking, paper alerts
-- [ ] **Paper Management** — ArXiv/Semantic Scholar paper collection, categorization, push notifications
-- [ ] **Smart Categorization & Push** — AI-powered content routing to relevant channels
+- [ ] **GitHub / Xiaohongshu / HF / Papers** — Manage, categorize, push notifications
+- [ ] **Smart Routing** — AI-powered content routing to relevant channels
 
 #### Unified API Management Platform
-- [ ] **API Usage Dashboard** — Centralized view of all API keys & usage across providers
-- [ ] **Cost Analytics** — Cross-provider cost breakdown, trends, forecasting
-- [ ] **Usage Statistics** — Request counts, latency, error rates, model comparison
-- [ ] **Budget Alerts** — Configurable spending alerts, auto-pause on threshold
-- [ ] **Key Rotation & Security** — API key lifecycle management, rotation reminders
+- [ ] **Usage Dashboard + Cost Analytics + Budget Alerts + Key Management**
 
 ### Backlog
-- [ ] Session search & filtering
 - [ ] Token usage charts / time series
 - [ ] Multi-user support
 - [ ] WebSocket-based live updates
