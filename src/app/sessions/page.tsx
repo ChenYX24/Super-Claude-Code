@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,8 +10,17 @@ import {
   Wrench, Brain, ChevronDown, ChevronRight, Coins, MessageSquare,
   ChevronsUp, ChevronsDown, MapPin, FileText, DollarSign,
   LayoutGrid, List, Zap, Moon, Archive, AlertCircle,
+  Terminal, Globe, Users, Edit3, Eye, Search, ArrowUpDown, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ---- Types ----
 
@@ -80,6 +89,16 @@ function shortModel(m?: string) {
   return m;
 }
 
+// Helper to highlight search matches
+function highlightText(text: string, search: string): React.ReactNode {
+  if (!search.trim()) return text;
+  const parts = text.split(new RegExp(`(${search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+  return parts.map((part, i) =>
+    part.toLowerCase() === search.toLowerCase() ?
+      <mark key={i} className="bg-yellow-200 dark:bg-yellow-800/60 px-0.5">{part}</mark> : part
+  );
+}
+
 // ---- Session Status (ClaudeGlance-inspired colors) ----
 
 type SessionStatus = "reading" | "thinking" | "writing" | "waiting" | "completed" | "error" | "idle";
@@ -105,7 +124,7 @@ const MODEL_COLORS: Record<string, string> = {
 
 // ---- Session Grid Block ----
 
-function SessionBlock({ session, onClick }: { session: SessionInfo; onClick: () => void }) {
+function SessionBlock({ session, onClick, searchQuery }: { session: SessionInfo; onClick: () => void; searchQuery?: string }) {
   const status = (session.status || "idle") as SessionStatus;
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
   const model = shortModel(session.model);
@@ -129,10 +148,12 @@ function SessionBlock({ session, onClick }: { session: SessionInfo; onClick: () 
 
       {/* Content */}
       <div className="text-xs font-medium truncate leading-tight mb-1 text-foreground/90">
-        {session.firstMessage ? session.firstMessage.slice(0, 40) : session.id.slice(0, 10)}
+        {searchQuery ? highlightText(session.firstMessage ? session.firstMessage.slice(0, 40) : session.id.slice(0, 10), searchQuery) :
+         (session.firstMessage ? session.firstMessage.slice(0, 40) : session.id.slice(0, 10))}
       </div>
       <div className="text-[10px] text-muted-foreground truncate">
-        {session.projectName.length > 18 ? "..." + session.projectName.slice(-16) : session.projectName}
+        {searchQuery ? highlightText(session.projectName.length > 18 ? "..." + session.projectName.slice(-16) : session.projectName, searchQuery) :
+         (session.projectName.length > 18 ? "..." + session.projectName.slice(-16) : session.projectName)}
       </div>
 
       {/* Footer: time + cost */}
@@ -201,7 +222,43 @@ function StatusLegend({ sessions }: { sessions: SessionInfo[] }) {
 function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: string, id: string) => void }) {
   const [filter, setFilter] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const sessions = filter ? data.recentSessions.filter(s => s.project === filter) : data.recentSessions;
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"date" | "cost" | "messages">("date");
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Filter and sort sessions
+  const sessions = useMemo(() => {
+    let filtered = filter ? data.recentSessions.filter(s => s.project === filter) : data.recentSessions;
+
+    // Apply search filter
+    if (debouncedSearch.trim()) {
+      const search = debouncedSearch.toLowerCase();
+      filtered = filtered.filter(s =>
+        (s.firstMessage?.toLowerCase().includes(search)) ||
+        (s.projectName.toLowerCase().includes(search)) ||
+        (s.model?.toLowerCase().includes(search)) ||
+        (s.id.toLowerCase().includes(search))
+      );
+    }
+
+    // Apply sorting
+    const sorted = [...filtered];
+    if (sortBy === "date") {
+      sorted.sort((a, b) => b.lastActive - a.lastActive);
+    } else if (sortBy === "cost") {
+      sorted.sort((a, b) => b.estimatedCost - a.estimatedCost);
+    } else if (sortBy === "messages") {
+      sorted.sort((a, b) => b.messageCount - a.messageCount);
+    }
+
+    return sorted;
+  }, [data.recentSessions, filter, debouncedSearch, sortBy]);
 
   return (
     <div className="space-y-5">
@@ -239,6 +296,41 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
         ))}
       </div>
 
+      {/* Search and Sort Controls */}
+      <div className="flex gap-3 items-center">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="Search sessions (message, project, model, ID)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 pr-9"
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 p-0"
+              onClick={() => setSearchQuery("")}
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+          <SelectTrigger className="w-[180px]">
+            <ArrowUpDown className="h-4 w-4 mr-2" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="date">Sort by Date</SelectItem>
+            <SelectItem value="cost">Sort by Cost</SelectItem>
+            <SelectItem value="messages">Sort by Messages</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex flex-wrap gap-2">
           <Badge variant={filter === "" ? "default" : "outline"} className="cursor-pointer" onClick={() => setFilter("")}>All</Badge>
@@ -259,6 +351,7 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
               key={`${s.project}-${s.id}`}
               session={s}
               onClick={() => onSelect(s.project, s.id)}
+              searchQuery={debouncedSearch}
             />
           ))}
         </div>
@@ -273,8 +366,13 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
                 <CardContent className="py-2.5 flex items-center gap-3">
                   <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${cfg.dot} ${cfg.animation || ""}`} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{s.firstMessage || s.id.slice(0, 12)}</div>
-                    <div className="text-xs text-muted-foreground">{formatDT(s.startTime)} · {timeAgo(s.lastActive)} · {s.projectName}</div>
+                    <div className="text-sm font-medium truncate">
+                      {debouncedSearch ? highlightText(s.firstMessage || s.id.slice(0, 12), debouncedSearch) :
+                       (s.firstMessage || s.id.slice(0, 12))}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatDT(s.startTime)} · {timeAgo(s.lastActive)} · {debouncedSearch ? highlightText(s.projectName, debouncedSearch) : s.projectName}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     {s.model && <Badge variant="secondary" className="text-xs">{shortModel(s.model)}</Badge>}
@@ -293,16 +391,75 @@ function SessionList({ data, onSelect }: { data: SessionsData; onSelect: (p: str
   );
 }
 
+// ---- Tool Configuration ----
+
+const TOOL_CONFIG: Record<string, {
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  icon: typeof Terminal;
+  category: string;
+}> = {
+  // Read operations (cyan/blue)
+  Read: { color: "text-cyan-600 dark:text-cyan-400", bgColor: "bg-cyan-50 dark:bg-cyan-950/30", borderColor: "border-cyan-200 dark:border-cyan-800", icon: Eye, category: "read" },
+  Glob: { color: "text-cyan-600 dark:text-cyan-400", bgColor: "bg-cyan-50 dark:bg-cyan-950/30", borderColor: "border-cyan-200 dark:border-cyan-800", icon: Search, category: "read" },
+  Grep: { color: "text-blue-600 dark:text-blue-400", bgColor: "bg-blue-50 dark:bg-blue-950/30", borderColor: "border-blue-200 dark:border-blue-800", icon: Search, category: "read" },
+
+  // Write operations (purple/violet)
+  Write: { color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-50 dark:bg-purple-950/30", borderColor: "border-purple-200 dark:border-purple-800", icon: FileText, category: "write" },
+  Edit: { color: "text-violet-600 dark:text-violet-400", bgColor: "bg-violet-50 dark:bg-violet-950/30", borderColor: "border-violet-200 dark:border-violet-800", icon: Edit3, category: "write" },
+  NotebookEdit: { color: "text-purple-600 dark:text-purple-400", bgColor: "bg-purple-50 dark:bg-purple-950/30", borderColor: "border-purple-200 dark:border-purple-800", icon: Edit3, category: "write" },
+
+  // Terminal operations (green)
+  Bash: { color: "text-green-600 dark:text-green-400", bgColor: "bg-green-50 dark:bg-green-950/30", borderColor: "border-green-200 dark:border-green-800", icon: Terminal, category: "bash" },
+
+  // Web operations (amber)
+  WebFetch: { color: "text-amber-600 dark:text-amber-400", bgColor: "bg-amber-50 dark:bg-amber-950/30", borderColor: "border-amber-200 dark:border-amber-800", icon: Globe, category: "web" },
+  WebSearch: { color: "text-orange-600 dark:text-orange-400", bgColor: "bg-orange-50 dark:bg-orange-950/30", borderColor: "border-orange-200 dark:border-orange-800", icon: Globe, category: "web" },
+
+  // Agent operations (pink)
+  Task: { color: "text-pink-600 dark:text-pink-400", bgColor: "bg-pink-50 dark:bg-pink-950/30", borderColor: "border-pink-200 dark:border-pink-800", icon: Users, category: "agent" },
+  SendMessage: { color: "text-rose-600 dark:text-rose-400", bgColor: "bg-rose-50 dark:bg-rose-950/30", borderColor: "border-rose-200 dark:border-rose-800", icon: MessageSquare, category: "agent" },
+};
+
+const DEFAULT_TOOL_CONFIG = {
+  color: "text-zinc-600 dark:text-zinc-400",
+  bgColor: "bg-zinc-50 dark:bg-zinc-950/30",
+  borderColor: "border-zinc-200 dark:border-zinc-800",
+  icon: Wrench,
+  category: "other",
+};
+
 // ---- Conversation Message ----
 
 function ConvMessage({ msg, showTools }: { msg: SessionMessage; showTools: boolean }) {
-  const [expanded, setExpanded] = useState(false);
+  const [thinkingExpanded, setThinkingExpanded] = useState(false);
+  const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
   const isUser = msg.role === "user";
   const hasContent = msg.content.trim().length > 0;
   const hasTools = msg.toolUse && msg.toolUse.length > 0;
   const hasThinking = !!msg.thinkingContent;
 
   if (!hasContent && !hasTools && !hasThinking) return null;
+
+  const toggleToolExpanded = (index: number) => {
+    const newExpanded = new Set(expandedTools);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedTools(newExpanded);
+  };
+
+  const parseToolInput = (tool: { name: string; input?: string }) => {
+    if (!tool.input) return {};
+    try {
+      return JSON.parse(tool.input);
+    } catch {
+      return { raw: tool.input };
+    }
+  };
 
   return (
     <div className={`flex gap-3 py-3 px-4 ${isUser ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}
@@ -319,6 +476,11 @@ function ConvMessage({ msg, showTools }: { msg: SessionMessage; showTools: boole
           <span className="text-xs text-muted-foreground">
             {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}
           </span>
+          {hasTools && showTools && (
+            <Badge variant="outline" className="text-xs h-4 ml-2">
+              {msg.toolUse!.length} tool{msg.toolUse!.length > 1 ? "s" : ""}
+            </Badge>
+          )}
           {(msg.inputTokens || msg.outputTokens) && (
             <span className="text-xs text-muted-foreground font-mono ml-auto">
               {fmtTokens(msg.inputTokens || 0)}in/{fmtTokens(msg.outputTokens || 0)}out
@@ -332,22 +494,114 @@ function ConvMessage({ msg, showTools }: { msg: SessionMessage; showTools: boole
 
         {hasThinking && showTools && (
           <div className="mb-2">
-            <button className="text-xs text-amber-600 flex items-center gap-1 hover:underline" onClick={() => setExpanded(!expanded)}>
-              <Brain className="h-3 w-3" />Thinking {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            <button className="text-xs text-amber-600 flex items-center gap-1 hover:underline" onClick={() => setThinkingExpanded(!thinkingExpanded)}>
+              <Brain className="h-3 w-3" />Thinking {thinkingExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             </button>
-            {expanded && <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded p-2 mt-1 whitespace-pre-wrap">{msg.thinkingContent}</div>}
+            {thinkingExpanded && <div className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded p-2 mt-1 whitespace-pre-wrap">{msg.thinkingContent}</div>}
           </div>
         )}
 
         {hasTools && showTools && (
-          <div className="mb-2 space-y-1">
-            {msg.toolUse!.map((tool, i) => (
-              <div key={i} className="text-xs bg-muted/40 rounded px-2 py-1.5 flex items-start gap-1.5">
-                <Wrench className="h-3 w-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                <span className="font-mono font-medium">{tool.name}</span>
-                {tool.input && <span className="text-muted-foreground truncate">{tool.input.slice(0, 120)}</span>}
-              </div>
-            ))}
+          <div className="mb-2 space-y-1.5">
+            {msg.toolUse!.map((tool, i) => {
+              const config = TOOL_CONFIG[tool.name] || DEFAULT_TOOL_CONFIG;
+              const Icon = config.icon;
+              const isExpanded = expandedTools.has(i);
+              const parsedInput = parseToolInput(tool);
+
+              return (
+                <div key={i} className={`text-xs rounded border ${config.bgColor} ${config.borderColor}`}>
+                  {/* Tool header - clickable to expand/collapse */}
+                  <button
+                    onClick={() => toggleToolExpanded(i)}
+                    className="w-full px-2.5 py-1.5 flex items-start gap-2 hover:opacity-80 transition-opacity"
+                  >
+                    <Icon className={`h-3.5 w-3.5 mt-0.5 flex-shrink-0 ${config.color}`} />
+                    <span className={`font-mono font-semibold ${config.color}`}>{tool.name}</span>
+
+                    {/* Tool-specific preview */}
+                    {!isExpanded && (
+                      <span className="text-muted-foreground truncate flex-1 text-left">
+                        {tool.name === "Bash" && parsedInput.command ? (
+                          <code className="font-mono">{parsedInput.command.slice(0, 60)}</code>
+                        ) : tool.name === "Read" && parsedInput.file_path ? (
+                          <span className="font-mono">{parsedInput.file_path.split(/[/\\]/).pop()}</span>
+                        ) : tool.name === "Edit" && parsedInput.file_path ? (
+                          <span className="font-mono">{parsedInput.file_path.split(/[/\\]/).pop()}</span>
+                        ) : tool.name === "Write" && parsedInput.file_path ? (
+                          <span className="font-mono">{parsedInput.file_path.split(/[/\\]/).pop()}</span>
+                        ) : tool.input ? (
+                          tool.input.slice(0, 50)
+                        ) : null}
+                      </span>
+                    )}
+
+                    {isExpanded ? <ChevronDown className="h-3 w-3 ml-auto flex-shrink-0" /> : <ChevronRight className="h-3 w-3 ml-auto flex-shrink-0" />}
+                  </button>
+
+                  {/* Expanded content */}
+                  {isExpanded && tool.input && (
+                    <div className="px-2.5 pb-2 pt-0 border-t border-current/10">
+                      {/* Special handling for specific tool types */}
+                      {tool.name === "Bash" && parsedInput.command ? (
+                        <div className="mt-1.5">
+                          <div className="text-[10px] text-muted-foreground mb-1">Command:</div>
+                          <div className="bg-black/90 dark:bg-black/60 text-green-400 px-2 py-1.5 rounded font-mono text-xs">
+                            $ {parsedInput.command}
+                          </div>
+                        </div>
+                      ) : tool.name === "Edit" && parsedInput.old_string && parsedInput.new_string ? (
+                        <div className="mt-1.5 space-y-1.5">
+                          {parsedInput.file_path && (
+                            <div>
+                              <div className="text-[10px] text-muted-foreground">File:</div>
+                              <div className="font-mono text-xs">{parsedInput.file_path}</div>
+                            </div>
+                          )}
+                          <div>
+                            <div className="text-[10px] text-muted-foreground mb-0.5">Changes:</div>
+                            <div className="bg-red-50 dark:bg-red-950/30 border-l-2 border-red-400 px-2 py-1 font-mono text-xs text-red-700 dark:text-red-400">
+                              - {parsedInput.old_string.slice(0, 150)}
+                            </div>
+                            <div className="bg-green-50 dark:bg-green-950/30 border-l-2 border-green-400 px-2 py-1 font-mono text-xs text-green-700 dark:text-green-400 mt-0.5">
+                              + {parsedInput.new_string.slice(0, 150)}
+                            </div>
+                          </div>
+                        </div>
+                      ) : tool.name === "Read" && parsedInput.file_path ? (
+                        <div className="mt-1.5">
+                          <div className="text-[10px] text-muted-foreground mb-1">File path:</div>
+                          <div className="font-mono text-xs">{parsedInput.file_path}</div>
+                          {(parsedInput.offset || parsedInput.limit) && (
+                            <div className="text-[10px] text-muted-foreground mt-1">
+                              Lines: {parsedInput.offset || 0} - {(parsedInput.offset || 0) + (parsedInput.limit || "all")}
+                            </div>
+                          )}
+                        </div>
+                      ) : tool.name === "Write" && parsedInput.file_path ? (
+                        <div className="mt-1.5">
+                          <div className="text-[10px] text-muted-foreground mb-1">File path:</div>
+                          <div className="font-mono text-xs">{parsedInput.file_path}</div>
+                          {parsedInput.content && (
+                            <div className="mt-1">
+                              <div className="text-[10px] text-muted-foreground mb-0.5">Content preview:</div>
+                              <div className="bg-muted/40 px-2 py-1 font-mono text-xs max-h-20 overflow-hidden">
+                                {parsedInput.content.slice(0, 200)}...
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        // Generic JSON display
+                        <pre className="mt-1.5 text-[11px] font-mono text-muted-foreground whitespace-pre-wrap break-words max-h-32 overflow-y-auto">
+                          {tool.input.slice(0, 500)}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
 

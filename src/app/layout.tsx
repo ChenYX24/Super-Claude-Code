@@ -9,6 +9,7 @@ import {
   Coins,
   FileEdit,
   Plug,
+  Settings,
 } from "lucide-react";
 
 const geistSans = Geist({
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/tokens", label: "Tokens", icon: Coins },
   { href: "/mcp", label: "MCP Servers", icon: Plug },
   { href: "/editor", label: "CLAUDE.md", icon: FileEdit },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function RootLayout({

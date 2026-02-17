@@ -301,7 +301,7 @@ export function getSessionDetail(
             else if (block.type === "tool_use") {
               const inputStr = typeof block.input === "string"
                 ? block.input : JSON.stringify(block.input || {});
-              toolUse.push({ name: block.name, input: inputStr.slice(0, 800) });
+              toolUse.push({ name: block.name, input: inputStr.slice(0, 1500) });
               // Track referenced files
               if (block.name === "Read" || block.name === "Edit" || block.name === "Write") {
                 const fp = block.input?.file_path;

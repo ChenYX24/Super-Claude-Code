@@ -3,7 +3,7 @@
  */
 
 // Navigation
-export type PageId = "home" | "team" | "sessions" | "tokens" | "projects" | "mcp" | "editor";
+export type PageId = "home" | "team" | "sessions" | "tokens" | "projects" | "mcp" | "editor" | "settings";
 
 // Status
 export type AgentStatus = "working" | "idle" | "completed" | "error";

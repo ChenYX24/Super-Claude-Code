@@ -208,9 +208,6 @@ export function createClaudeMd(projectEncoded: string): { success: boolean; path
 }
 
 /**
- * 在任意路径下创建 CLAUDE.md
- */
-/**
  * 删除 CLAUDE.md 文件
  */
 export function deleteClaudeMdFile(filePath: string): { success: boolean; error?: string } {

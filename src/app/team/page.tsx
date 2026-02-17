@@ -562,9 +562,11 @@ export default function TeamPage() {
       )
     : messages;
 
-  const filteredTasks = selectedAgent
-    ? tasks.filter((t) => t.owner === selectedAgent)
-    : tasks;
+  const filteredTasks = selectedAgent === "__unassigned__"
+    ? tasks.filter((t) => !t.owner)
+    : selectedAgent
+      ? tasks.filter((t) => t.owner === selectedAgent)
+      : tasks;
 
   const completedCount = tasks.filter(
     (t) => t.status === "completed"
@@ -682,6 +684,28 @@ export default function TeamPage() {
                   />
                 ))}
             </>
+          )}
+
+          {/* Unassigned tasks indicator */}
+          {tasks.filter((t) => !t.owner).length > 0 && (
+            <div
+              className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer text-sm mt-1 ${
+                selectedAgent === "__unassigned__"
+                  ? "bg-primary/10 font-medium"
+                  : "hover:bg-muted/60 text-muted-foreground"
+              }`}
+              onClick={() =>
+                setSelectedAgent(
+                  selectedAgent === "__unassigned__" ? "" : "__unassigned__"
+                )
+              }
+            >
+              <ListTodo className="h-4 w-4 text-orange-500" />
+              <span>Unassigned</span>
+              <Badge variant="secondary" className="ml-auto text-xs h-5">
+                {tasks.filter((t) => !t.owner).length}
+              </Badge>
+            </div>
           )}
         </div>
       </div>

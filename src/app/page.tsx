@@ -87,7 +87,7 @@ export default function HomePage() {
         {data && data.teams.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {data.teams.map((team) => (
-              <Link key={team.name} href="/team">
+              <Link key={team.name} href={`/team?name=${encodeURIComponent(team.name)}`}>
                 <Card className="transition-all hover:shadow-md cursor-pointer">
                   <CardHeader>
                     <div className="flex items-center justify-between">

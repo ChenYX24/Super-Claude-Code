@@ -179,9 +179,6 @@ export default function EditorPage() {
     finally { setCreating(false); }
   };
 
-  // browseTo kept as alias for browseToDir (used in JSX)
-  const browseTo = (dirPath: string) => browseToDir(dirPath);
-
   const [browseIsDriveList, setBrowseIsDriveList] = useState(false);
 
   // Browse directory (updated to handle drive list)
@@ -200,6 +197,9 @@ export default function EditorPage() {
     } catch { /* skip */ }
     finally { setBrowseLoading(false); }
   };
+
+  // Alias for JSX usage
+  const browseTo = browseToDir;
 
   // Initialize browse when tab opens — start at drive list
   useEffect(() => {
