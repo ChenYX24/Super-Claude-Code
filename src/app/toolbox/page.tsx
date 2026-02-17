@@ -9,7 +9,8 @@ import { MarkdownContent } from "@/components/markdown-content";
 import {
   Wrench, Plug, Sparkles, Command, Shield, Bot, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Info, AlertCircle,
-  CheckCircle, Clock, Circle,
+  CheckCircle, Clock, Circle, HelpCircle, X, FolderOpen,
+  ExternalLink, Zap, Hash,
 } from "lucide-react";
 
 // ---- Types ----
@@ -75,45 +76,168 @@ interface ToolboxData {
 
 type HealthStatus = "healthy" | "warning" | "timeout" | "error" | "checking" | "unknown";
 
-const HEALTH_CONFIG: Record<HealthStatus, { color: string; icon: typeof CheckCircle }> = {
-  healthy: { color: "text-green-500", icon: CheckCircle },
-  warning: { color: "text-yellow-500", icon: AlertCircle },
-  timeout: { color: "text-orange-500", icon: Clock },
-  error: { color: "text-red-500", icon: AlertCircle },
-  checking: { color: "text-muted-foreground animate-spin", icon: RefreshCw },
-  unknown: { color: "text-muted-foreground", icon: Circle },
+const HEALTH_CONFIG: Record<HealthStatus, { color: string; icon: typeof CheckCircle; label: string }> = {
+  healthy: { color: "text-green-500", icon: CheckCircle, label: "Healthy" },
+  warning: { color: "text-yellow-500", icon: AlertCircle, label: "Warning" },
+  timeout: { color: "text-orange-500", icon: Clock, label: "Timeout" },
+  error: { color: "text-red-500", icon: AlertCircle, label: "Error" },
+  checking: { color: "text-muted-foreground animate-spin", icon: RefreshCw, label: "Checking" },
+  unknown: { color: "text-muted-foreground", icon: Circle, label: "Unknown" },
 };
+
+// ---- Help Dialog ----
+
+function HelpDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-background border rounded-xl shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-background z-10">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <HelpCircle className="h-5 w-5 text-primary" />
+            Toolbox Guide
+          </h2>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="px-6 py-4">
+          <MarkdownContent content={HELP_CONTENT} className="text-sm" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const HELP_CONTENT = `
+## What is Toolbox?
+
+Toolbox is the **unified configuration center** for Claude Code. It gives you a read-only overview of all the extensions, rules, and integrations that shape how Claude Code works in your environment.
+
+---
+
+### MCP Servers
+**Model Context Protocol** servers extend Claude's capabilities with external tools. Each server provides specialized functions (filesystem access, database queries, web scraping, etc.).
+
+- **Global servers**: Configured in \`~/.claude/settings.json\` — available in all projects
+- **Project servers**: Configured in \`.mcp.json\` files — scoped to specific projects
+- **Health check**: Click the refresh icon to verify a server's executable is reachable
+
+**Popular MCP servers**: filesystem, brave-search, github, postgres, puppeteer, memory
+
+---
+
+### Skills & Commands
+**Skills** (\`~/.claude/skills/\`) are reusable prompt templates that Claude can invoke with the Skill tool. They define specialized behaviors with optional tool restrictions.
+
+**Commands** (\`~/.claude/commands/\`) are user-invocable slash commands (e.g., \`/commit\`, \`/review-pr\`). They expand into full prompts when triggered.
+
+---
+
+### Hooks
+Hooks are **shell commands** that run automatically at specific lifecycle events:
+
+| Hook Type | When it runs |
+|-----------|-------------|
+| **PreToolUse** | Before a tool executes (can block/modify) |
+| **PostToolUse** | After a tool completes |
+| **SessionStart** | When a new session begins |
+| **SessionEnd** | When a session ends |
+| **Stop** | When Claude stops generating |
+| **PreCompact** | Before context compaction |
+| **PermissionRequest** | When permission is needed |
+
+---
+
+### Agents
+Custom agent definitions (\`~/.claude/agents/\`) provide specialized personas with their own system prompts, model preferences, and tool restrictions. They can be used as subagents via the Task tool.
+
+---
+
+### Rules
+Rules (\`~/.claude/rules/\`) are instruction files that Claude follows automatically. They're organized by category (e.g., \`common/\`, \`python/\`, \`typescript/\`) and loaded based on context.
+
+---
+
+### Configuration Paths
+| Item | Location |
+|------|----------|
+| Settings | \`~/.claude/settings.json\` |
+| MCP (global) | \`~/.claude/settings.json\` > \`mcpServers\` |
+| MCP (project) | \`<project>/.mcp.json\` |
+| Skills | \`~/.claude/skills/<name>/SKILL.md\` |
+| Commands | \`~/.claude/commands/<name>.md\` |
+| Agents | \`~/.claude/agents/<name>.md\` |
+| Rules | \`~/.claude/rules/**/*.md\` |
+| Hooks | \`~/.claude/settings.json\` > \`hooks\` |
+`;
 
 // ---- Expandable Card ----
 
-function ExpandableCard({ title, subtitle, badge, children }: {
+function ExpandableCard({ title, subtitle, icon, badge, children }: {
   title: string;
   subtitle?: string;
+  icon?: React.ReactNode;
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Card>
+    <Card className={expanded ? "ring-1 ring-primary/20" : ""}>
       <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-2">
-            {expanded ? <ChevronDown className="h-4 w-4 mt-0.5 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground" />}
-            <div>
-              <CardTitle className="text-sm font-mono">{title}</CardTitle>
-              {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2 min-w-0">
+            {expanded ? <ChevronDown className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />}
+            {icon}
+            <div className="min-w-0">
+              <CardTitle className="text-sm font-mono truncate">{title}</CardTitle>
+              {subtitle && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{subtitle}</p>}
             </div>
           </div>
-          {badge}
+          <div className="flex-shrink-0">{badge}</div>
         </div>
       </CardHeader>
       {expanded && (
-        <CardContent className="pt-0">
-          {children}
+        <CardContent className="pt-0 border-t mt-2">
+          <div className="pt-3">{children}</div>
         </CardContent>
       )}
     </Card>
+  );
+}
+
+// ---- Summary Stats ----
+
+function SummaryStats({ data }: { data: ToolboxData }) {
+  const mcpCount = Object.keys(data.mcp.global).length +
+    data.mcp.projects.reduce((s, p) => s + Object.keys(p.servers).length, 0);
+
+  const stats = [
+    { icon: Plug, label: "MCP Servers", value: mcpCount, color: "text-blue-500" },
+    { icon: Sparkles, label: "Skills", value: data.skills.length, color: "text-amber-500" },
+    { icon: Command, label: "Commands", value: data.commands.length, color: "text-purple-500" },
+    { icon: Shield, label: "Hooks", value: data.hooks.length, color: "text-green-500" },
+    { icon: Bot, label: "Agents", value: data.agents.length, color: "text-pink-500" },
+    { icon: BookOpen, label: "Rules", value: data.rules.length, color: "text-cyan-500" },
+  ];
+
+  return (
+    <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+      {stats.map(({ icon: Icon, label, value, color }) => (
+        <Card key={label} className="text-center">
+          <CardContent className="py-3 px-2">
+            <Icon className={`h-5 w-5 mx-auto mb-1 ${color}`} />
+            <div className="text-2xl font-bold">{value}</div>
+            <div className="text-[10px] text-muted-foreground">{label}</div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
   );
 }
 
@@ -130,15 +254,14 @@ function MCPTab({ data, health, onCheckHealth }: {
 
   if (!hasGlobal && !hasProject) {
     return (
-      <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-        <CardContent className="py-4 flex items-start gap-3">
-          <Info className="h-5 w-5 text-amber-600 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">No MCP servers configured</p>
-            <p className="text-xs text-amber-600 mt-1">
-              Add MCP servers in <code>~/.claude/settings.json</code> or project <code>.mcp.json</code>.
-            </p>
-          </div>
+      <Card className="border-dashed">
+        <CardContent className="py-10 text-center">
+          <Plug className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+          <p className="text-sm font-medium mb-1">No MCP servers configured</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            MCP servers extend Claude with external tools (filesystem, search, databases, etc.).
+            Configure them in <code className="bg-muted px-1 rounded">~/.claude/settings.json</code> or project <code className="bg-muted px-1 rounded">.mcp.json</code>.
+          </p>
         </CardContent>
       </Card>
     );
@@ -146,49 +269,52 @@ function MCPTab({ data, health, onCheckHealth }: {
 
   const renderServer = (name: string, config: MCPServerConfig, scope: string) => {
     const status = health[name] || "unknown";
-    const cfg = HEALTH_CONFIG[status];
-    const Icon = cfg.icon;
+    const hcfg = HEALTH_CONFIG[status];
+    const HIcon = hcfg.icon;
     const cmdDisplay = config.args?.length ? `${config.command} ${config.args.join(" ")}` : config.command;
 
     return (
-      <Card key={`${scope}-${name}`}>
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <Icon className={`h-4 w-4 ${cfg.color}`} />
-              <CardTitle className="text-sm font-mono">{name}</CardTitle>
+      <Card key={`${scope}-${name}`} className="group hover:shadow-md transition-shadow">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className={`h-8 w-8 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center`}>
+                <Plug className="h-4 w-4 text-blue-500" />
+              </div>
+              <div>
+                <CardTitle className="text-sm font-mono">{name}</CardTitle>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Badge variant={scope === "Global" ? "default" : "secondary"} className="text-[10px] h-4 px-1">{scope}</Badge>
+                  <span className={`text-[10px] flex items-center gap-0.5 ${hcfg.color}`}>
+                    <HIcon className="h-3 w-3" /> {hcfg.label}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <Badge variant={scope === "Global" ? "default" : "secondary"} className="text-xs">{scope}</Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
-                onClick={() => onCheckHealth(name, config.command)}
-                title="Check health"
-              >
-                <RefreshCw className="h-3 w-3" />
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => onCheckHealth(name, config.command)}
+            >
+              <RefreshCw className="h-3 w-3 mr-1" /> Check
+            </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div>
-            <div className="text-xs text-muted-foreground mb-1">Command</div>
-            <code className="text-xs bg-muted px-2 py-1 rounded block break-all">{cmdDisplay}</code>
-          </div>
+        <CardContent className="space-y-2 pt-0">
+          <code className="text-xs bg-muted px-2 py-1.5 rounded block break-all font-mono">{cmdDisplay}</code>
           {config.env && Object.keys(config.env).length > 0 && (
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">Env</div>
+            <div className="space-y-0.5">
               {Object.entries(config.env).map(([k, v]) => (
-                <div key={k} className="text-xs bg-muted/50 px-2 py-0.5 rounded font-mono">{k}: {v}</div>
+                <div key={k} className="text-[11px] text-muted-foreground font-mono px-1">
+                  <span className="text-foreground/70">{k}</span>=<span className="text-green-600 dark:text-green-400">{v}</span>
+                </div>
               ))}
             </div>
           )}
           {config.cwd && (
-            <div>
-              <div className="text-xs text-muted-foreground mb-1">CWD</div>
-              <code className="text-xs bg-muted px-2 py-1 rounded block break-all">{config.cwd}</code>
+            <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <FolderOpen className="h-3 w-3" /> {config.cwd}
             </div>
           )}
         </CardContent>
@@ -200,22 +326,22 @@ function MCPTab({ data, health, onCheckHealth }: {
     <div className="space-y-6">
       {hasGlobal && (
         <section>
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+          <div className="flex items-center gap-2 mb-3">
             <Badge variant="default" className="text-xs">Global</Badge>
-            <span className="text-muted-foreground text-xs">{globalEntries.length} server{globalEntries.length !== 1 ? "s" : ""}</span>
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <span className="text-xs text-muted-foreground">{globalEntries.length} server{globalEntries.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {globalEntries.map(([name, config]) => renderServer(name, config, "Global"))}
           </div>
         </section>
       )}
       {hasProject && data.projects.map(({ project, servers }) => (
         <section key={project}>
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">{project}</Badge>
-            <span className="text-muted-foreground text-xs">{Object.keys(servers).length} server{Object.keys(servers).length !== 1 ? "s" : ""}</span>
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Badge variant="secondary" className="text-xs font-mono">{project}</Badge>
+            <span className="text-xs text-muted-foreground">{Object.keys(servers).length} server{Object.keys(servers).length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {Object.entries(servers).map(([name, config]) => renderServer(name, config, project))}
           </div>
         </section>
@@ -229,11 +355,13 @@ function MCPTab({ data, health, onCheckHealth }: {
 function SkillsTab({ skills, commands }: { skills: SkillInfo[]; commands: CommandInfo[] }) {
   if (skills.length === 0 && commands.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Sparkles className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No skills or commands found</p>
-          <p className="text-xs mt-1">Add skills to <code>~/.claude/skills/</code> or commands to <code>~/.claude/commands/</code></p>
+      <Card className="border-dashed">
+        <CardContent className="py-10 text-center">
+          <Sparkles className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+          <p className="text-sm font-medium mb-1">No skills or commands found</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Skills provide reusable prompt templates. Commands define slash commands like <code className="bg-muted px-1 rounded">/commit</code>.
+          </p>
         </CardContent>
       </Card>
     );
@@ -243,21 +371,24 @@ function SkillsTab({ skills, commands }: { skills: SkillInfo[]; commands: Comman
     <div className="space-y-6">
       {skills.length > 0 && (
         <section>
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <Sparkles className="h-4 w-4" /> Skills ({skills.length})
-          </h3>
-          <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="h-4 w-4 text-amber-500" />
+            <span className="text-sm font-semibold">Skills</span>
+            <Badge variant="outline" className="text-xs">{skills.length}</Badge>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {skills.map((skill) => (
               <ExpandableCard
                 key={skill.name}
                 title={skill.name}
                 subtitle={skill.description}
+                icon={<div className="h-7 w-7 rounded-md bg-amber-500/10 flex items-center justify-center flex-shrink-0"><Sparkles className="h-3.5 w-3.5 text-amber-500" /></div>}
                 badge={skill.allowedTools && (
                   <div className="flex gap-1 flex-wrap">
-                    {skill.allowedTools.slice(0, 3).map(t => (
+                    {skill.allowedTools.slice(0, 2).map(t => (
                       <Badge key={t} variant="outline" className="text-[10px]">{t}</Badge>
                     ))}
-                    {skill.allowedTools.length > 3 && <Badge variant="outline" className="text-[10px]">+{skill.allowedTools.length - 3}</Badge>}
+                    {skill.allowedTools.length > 2 && <Badge variant="outline" className="text-[10px]">+{skill.allowedTools.length - 2}</Badge>}
                   </div>
                 )}
               >
@@ -270,12 +401,19 @@ function SkillsTab({ skills, commands }: { skills: SkillInfo[]; commands: Comman
 
       {commands.length > 0 && (
         <section>
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <Command className="h-4 w-4" /> Commands ({commands.length})
-          </h3>
-          <div className="space-y-2">
+          <div className="flex items-center gap-2 mb-3">
+            <Command className="h-4 w-4 text-purple-500" />
+            <span className="text-sm font-semibold">Slash Commands</span>
+            <Badge variant="outline" className="text-xs">{commands.length}</Badge>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {commands.map((cmd) => (
-              <ExpandableCard key={cmd.name} title={`/${cmd.name}`} subtitle={cmd.description}>
+              <ExpandableCard
+                key={cmd.name}
+                title={`/${cmd.name}`}
+                subtitle={cmd.description}
+                icon={<div className="h-7 w-7 rounded-md bg-purple-500/10 flex items-center justify-center flex-shrink-0"><Command className="h-3.5 w-3.5 text-purple-500" /></div>}
+              >
                 <MarkdownContent content={cmd.content} className="text-xs" />
               </ExpandableCard>
             ))}
@@ -288,16 +426,31 @@ function SkillsTab({ skills, commands }: { skills: SkillInfo[]; commands: Comman
 
 // ---- Hooks Tab ----
 
-const HOOK_TYPES = ["PreToolUse", "PostToolUse", "Stop", "SessionStart", "SessionEnd"];
+const HOOK_TYPES = [
+  "PreToolUse", "PostToolUse", "Stop", "SessionStart", "SessionEnd",
+  "PreCompact", "PermissionRequest", "SubagentStart", "SubagentStop",
+];
+
+const HOOK_COLORS: Record<string, string> = {
+  PreToolUse: "bg-blue-500/10 text-blue-500",
+  PostToolUse: "bg-cyan-500/10 text-cyan-500",
+  Stop: "bg-red-500/10 text-red-500",
+  SessionStart: "bg-green-500/10 text-green-500",
+  SessionEnd: "bg-orange-500/10 text-orange-500",
+  PreCompact: "bg-purple-500/10 text-purple-500",
+  PermissionRequest: "bg-amber-500/10 text-amber-500",
+};
 
 function HooksTab({ hooks }: { hooks: HookEntry[] }) {
   if (hooks.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Shield className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No hooks configured</p>
-          <p className="text-xs mt-1">Add hooks in <code>~/.claude/settings.json</code> under the <code>hooks</code> field</p>
+      <Card className="border-dashed">
+        <CardContent className="py-10 text-center">
+          <Shield className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+          <p className="text-sm font-medium mb-1">No hooks configured</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Hooks run shell commands at lifecycle events (before/after tool use, session start/end, etc.).
+          </p>
         </CardContent>
       </Card>
     );
@@ -310,40 +463,48 @@ function HooksTab({ hooks }: { hooks: HookEntry[] }) {
     grouped.set(hook.type, list);
   }
 
+  const allTypes = [...HOOK_TYPES, ...Array.from(grouped.keys()).filter(t => !HOOK_TYPES.includes(t))];
+
   return (
     <div className="space-y-4">
-      {HOOK_TYPES.map((type) => {
+      {allTypes.map((type) => {
         const items = grouped.get(type);
         if (!items) return null;
+        const colorClass = HOOK_COLORS[type] || "bg-zinc-500/10 text-zinc-500";
+
         return (
           <section key={type}>
-            <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              <Shield className="h-4 w-4" /> {type}
-              <Badge variant="outline" className="text-xs">{items.length}</Badge>
-            </h3>
-            <div className="space-y-2">
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`h-6 px-2 rounded-md text-[11px] font-mono font-semibold flex items-center ${colorClass}`}>
+                {type}
+              </div>
+              <Badge variant="outline" className="text-[10px]">{items.length} hook{items.length > 1 ? "s" : ""}</Badge>
+            </div>
+            <div className="space-y-1.5">
               {items.map((hook, i) => (
-                <Card key={i}>
-                  <CardContent className="py-3 space-y-2">
-                    {hook.matcher && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Matcher:</span>
-                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">{hook.matcher}</code>
+                <Card key={i} className="bg-muted/20">
+                  <CardContent className="py-2.5 px-3 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        {hook.description && (
+                          <p className="text-xs text-foreground/80 mb-1">{hook.description}</p>
+                        )}
+                        {hook.matcher && (
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[10px] text-muted-foreground">match:</span>
+                            <code className="text-[11px] bg-muted px-1.5 py-0.5 rounded font-mono">{hook.matcher}</code>
+                          </div>
+                        )}
+                        <div className="bg-zinc-900 dark:bg-zinc-950 text-green-400 px-2.5 py-1.5 rounded font-mono text-[11px] break-all">
+                          $ {hook.command}
+                        </div>
                       </div>
-                    )}
-                    <div>
-                      <span className="text-xs text-muted-foreground">Command:</span>
-                      <code className="text-xs bg-zinc-900 text-green-400 dark:bg-zinc-950 px-2 py-1 rounded block mt-1 font-mono">
-                        $ {hook.command}
-                      </code>
+                      {hook.timeout && (
+                        <Badge variant="outline" className="text-[10px] flex-shrink-0">
+                          <Clock className="h-2.5 w-2.5 mr-0.5" /> {hook.timeout}s
+                        </Badge>
+                      )}
                     </div>
-                    {hook.timeout && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Timeout:</span>
-                        <span className="text-xs">{hook.timeout}ms</span>
-                      </div>
-                    )}
-                    {hook.description && <p className="text-xs text-muted-foreground">{hook.description}</p>}
                   </CardContent>
                 </Card>
               ))}
@@ -351,27 +512,6 @@ function HooksTab({ hooks }: { hooks: HookEntry[] }) {
           </section>
         );
       })}
-
-      {/* Show any hook types not in the predefined list */}
-      {Array.from(grouped.entries())
-        .filter(([type]) => !HOOK_TYPES.includes(type))
-        .map(([type, items]) => (
-          <section key={type}>
-            <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-              <Shield className="h-4 w-4" /> {type}
-              <Badge variant="outline" className="text-xs">{items.length}</Badge>
-            </h3>
-            <div className="space-y-2">
-              {items.map((hook, i) => (
-                <Card key={i}>
-                  <CardContent className="py-3">
-                    <code className="text-xs bg-zinc-900 text-green-400 px-2 py-1 rounded block font-mono">$ {hook.command}</code>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-        ))}
     </div>
   );
 }
@@ -381,24 +521,28 @@ function HooksTab({ hooks }: { hooks: HookEntry[] }) {
 function AgentsTab({ agents }: { agents: AgentInfo[] }) {
   if (agents.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <Bot className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No custom agents found</p>
-          <p className="text-xs mt-1">Add agent definitions to <code>~/.claude/agents/</code></p>
+      <Card className="border-dashed">
+        <CardContent className="py-10 text-center">
+          <Bot className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+          <p className="text-sm font-medium mb-1">No custom agents found</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Custom agents define specialized personas with their own prompts and tool access.
+            Create them at <code className="bg-muted px-1 rounded">~/.claude/agents/</code>.
+          </p>
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
       {agents.map((agent) => (
         <ExpandableCard
           key={agent.name}
           title={agent.name}
           subtitle={agent.description}
-          badge={<Badge variant="secondary" className="text-xs"><Bot className="h-3 w-3 mr-1" />Agent</Badge>}
+          icon={<div className="h-7 w-7 rounded-md bg-pink-500/10 flex items-center justify-center flex-shrink-0"><Bot className="h-3.5 w-3.5 text-pink-500" /></div>}
+          badge={<Badge variant="secondary" className="text-[10px]">Agent</Badge>}
         >
           <MarkdownContent content={agent.content} className="text-xs" />
         </ExpandableCard>
@@ -412,17 +556,19 @@ function AgentsTab({ agents }: { agents: AgentInfo[] }) {
 function RulesTab({ rules }: { rules: RuleInfo[] }) {
   if (rules.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-8 text-center text-muted-foreground">
-          <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
-          <p className="text-sm">No rules found</p>
-          <p className="text-xs mt-1">Add rules to <code>~/.claude/rules/</code></p>
+      <Card className="border-dashed">
+        <CardContent className="py-10 text-center">
+          <BookOpen className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+          <p className="text-sm font-medium mb-1">No rules found</p>
+          <p className="text-xs text-muted-foreground max-w-md mx-auto">
+            Rules are instruction files Claude follows automatically.
+            Organize them by topic at <code className="bg-muted px-1 rounded">~/.claude/rules/</code>.
+          </p>
         </CardContent>
       </Card>
     );
   }
 
-  // Group by group name
   const grouped = new Map<string, RuleInfo[]>();
   for (const rule of rules) {
     const list = grouped.get(rule.group) || [];
@@ -431,16 +577,22 @@ function RulesTab({ rules }: { rules: RuleInfo[] }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {Array.from(grouped.entries()).map(([group, items]) => (
         <section key={group}>
-          <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-            <BookOpen className="h-4 w-4" /> {group}
+          <div className="flex items-center gap-2 mb-2">
+            <FolderOpen className="h-4 w-4 text-cyan-500" />
+            <span className="text-sm font-semibold">{group}</span>
             <Badge variant="outline" className="text-xs">{items.length}</Badge>
-          </h3>
-          <div className="space-y-2">
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {items.map((rule) => (
-              <ExpandableCard key={rule.path} title={rule.name} subtitle={rule.preview.split("\n")[0]?.slice(0, 80)}>
+              <ExpandableCard
+                key={rule.path}
+                title={rule.name}
+                subtitle={rule.preview.split("\n")[0]?.replace(/^#+\s*/, "").slice(0, 80)}
+                icon={<div className="h-7 w-7 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0"><BookOpen className="h-3.5 w-3.5 text-cyan-500" /></div>}
+              >
                 <MarkdownContent content={rule.content} className="text-xs" />
               </ExpandableCard>
             ))}
@@ -457,6 +609,7 @@ export default function ToolboxPage() {
   const [data, setData] = useState<ToolboxData | null>(null);
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState<Record<string, HealthStatus>>({});
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     fetch("/api/toolbox")
@@ -497,35 +650,50 @@ export default function ToolboxPage() {
   const mcpCount = Object.keys(data.mcp.global).length + data.mcp.projects.reduce((s, p) => s + Object.keys(p.servers).length, 0);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Wrench className="h-6 w-6" />
-        Toolbox
-      </h1>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Wrench className="h-6 w-6" />
+            Toolbox
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Claude Code configuration center — MCP servers, skills, hooks, agents & rules
+          </p>
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowHelp(true)}>
+          <HelpCircle className="h-4 w-4" /> Help
+        </Button>
+      </div>
 
+      {/* Summary Stats */}
+      <SummaryStats data={data} />
+
+      {/* Tabs */}
       <Tabs defaultValue="mcp">
         <TabsList>
           <TabsTrigger value="mcp" className="gap-1.5">
-            <Plug className="h-3.5 w-3.5" /> MCP Servers
-            {mcpCount > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-1">{mcpCount}</Badge>}
+            <Plug className="h-3.5 w-3.5" /> MCP
+            {mcpCount > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{mcpCount}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="skills" className="gap-1.5">
-            <Sparkles className="h-3.5 w-3.5" /> Skills & Commands
+            <Sparkles className="h-3.5 w-3.5" /> Skills
             {(data.skills.length + data.commands.length) > 0 && (
-              <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-1">{data.skills.length + data.commands.length}</Badge>
+              <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.skills.length + data.commands.length}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="hooks" className="gap-1.5">
             <Shield className="h-3.5 w-3.5" /> Hooks
-            {data.hooks.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-1">{data.hooks.length}</Badge>}
+            {data.hooks.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.hooks.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="agents" className="gap-1.5">
             <Bot className="h-3.5 w-3.5" /> Agents
-            {data.agents.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-1">{data.agents.length}</Badge>}
+            {data.agents.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.agents.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5">
             <BookOpen className="h-3.5 w-3.5" /> Rules
-            {data.rules.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-1">{data.rules.length}</Badge>}
+            {data.rules.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.rules.length}</Badge>}
           </TabsTrigger>
         </TabsList>
 
@@ -545,6 +713,9 @@ export default function ToolboxPage() {
           <RulesTab rules={data.rules} />
         </TabsContent>
       </Tabs>
+
+      {/* Help Dialog */}
+      <HelpDialog open={showHelp} onClose={() => setShowHelp(false)} />
     </div>
   );
 }
