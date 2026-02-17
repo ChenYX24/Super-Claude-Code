@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import { TerminalMessage } from "@/components/terminal-message";
 import {
-  ChevronsUp, ChevronsDown, Search, X, Wrench,
+  ChevronsUp, ChevronsDown, Search, X, Wrench, MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,12 @@ interface SessionMessage {
   isCheckpoint?: boolean;
 }
 
+interface Checkpoint {
+  index: number;
+  content: string;
+  timestamp: string;
+}
+
 interface SessionDetail {
   id: string;
   project: string;
@@ -37,6 +43,7 @@ interface SessionDetail {
   model?: string;
   startTime: string;
   endTime: string;
+  checkpoints?: Checkpoint[];
 }
 
 // ---- Terminal View ----
@@ -44,8 +51,39 @@ interface SessionDetail {
 export function TerminalView({ detail }: { detail: SessionDetail }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showTools, setShowTools] = useState(true);
+  const [showCheckpoints, setShowCheckpoints] = useState(false);
   const [search, setSearch] = useState("");
   const [searchMatch, setSearchMatch] = useState(0);
+
+  const checkpoints = detail.checkpoints || [];
+
+  // Map original message index → visible index for checkpoint jumping
+  const origToVisible = useMemo(() => {
+    const map = new Map<number, number>();
+    let vi = 0;
+    for (let i = 0; i < detail.messages.length; i++) {
+      const m = detail.messages[i];
+      if ((m.role === "user" || m.role === "assistant") &&
+          (m.content.trim() || (m.toolUse && m.toolUse.length > 0) || m.thinkingContent)) {
+        map.set(i, vi);
+        vi++;
+      }
+    }
+    return map;
+  }, [detail.messages]);
+
+  const scrollToCheckpoint = useCallback((origIdx: number) => {
+    const vi = origToVisible.get(origIdx);
+    if (vi === undefined) return;
+    const msgs = scrollRef.current?.querySelectorAll("[data-msg-idx]");
+    if (msgs && msgs[vi]) {
+      msgs[vi].scrollIntoView({ behavior: "smooth", block: "center" });
+      // Flash highlight
+      msgs[vi].classList.add("ring-1", "ring-green-500/50");
+      setTimeout(() => msgs[vi].classList.remove("ring-1", "ring-green-500/50"), 2000);
+    }
+    setShowCheckpoints(false);
+  }, [origToVisible]);
 
   const visible = useMemo(() =>
     detail.messages.filter(m =>
@@ -130,6 +168,16 @@ export function TerminalView({ detail }: { detail: SessionDetail }) {
           >
             <Wrench className="h-3 w-3 mr-1" /> tools
           </Button>
+          {checkpoints.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-6 px-2 text-[10px] ${showCheckpoints ? "text-yellow-400" : "text-zinc-600"} hover:text-zinc-200 hover:bg-zinc-800`}
+              onClick={() => setShowCheckpoints(!showCheckpoints)}
+            >
+              <MapPin className="h-3 w-3 mr-1" /> {checkpoints.length}
+            </Button>
+          )}
           <Badge variant="outline" className="text-[10px] h-5 border-zinc-700 text-zinc-500">
             {visible.length} msgs
           </Badge>
@@ -182,6 +230,30 @@ export function TerminalView({ detail }: { detail: SessionDetail }) {
         )}
       </div>
 
+      {/* Checkpoints panel */}
+      {showCheckpoints && checkpoints.length > 0 && (
+        <div className="max-h-48 overflow-auto border-b border-zinc-800/50 bg-zinc-950/50">
+          <div className="px-4 py-1.5 text-[10px] text-zinc-600 font-mono uppercase tracking-wider">
+            Checkpoints ({checkpoints.length})
+          </div>
+          {checkpoints.map((cp, i) => (
+            <button
+              key={i}
+              className="w-full text-left px-4 py-1.5 text-xs font-mono hover:bg-zinc-800/50 transition-colors flex items-start gap-2"
+              onClick={() => scrollToCheckpoint(cp.index)}
+            >
+              <MapPin className="h-3 w-3 text-yellow-500/70 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-zinc-400 truncate block">{cp.content}</span>
+                <span className="text-zinc-600 text-[10px]">
+                  {cp.timestamp ? new Date(cp.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : ""}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Terminal content */}
       <div ref={scrollRef} className="flex-1 overflow-auto py-2">
         {/* Startup message */}
@@ -190,13 +262,14 @@ export function TerminalView({ detail }: { detail: SessionDetail }) {
         </div>
 
         {visible.map((msg, i) => (
-          <TerminalMessage
-            key={msg.uuid}
-            msg={msg}
-            showTools={showTools}
-            searchHighlight={searchLower}
-            isSearchMatch={searchLower ? matchedIndices[searchMatch] === i : false}
-          />
+          <div key={msg.uuid} data-msg-idx={i}>
+            <TerminalMessage
+              msg={msg}
+              showTools={showTools}
+              searchHighlight={searchLower}
+              isSearchMatch={searchLower ? matchedIndices[searchMatch] === i : false}
+            />
+          </div>
         ))}
 
         {detail.endTime && (

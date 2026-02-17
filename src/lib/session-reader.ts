@@ -223,19 +223,23 @@ export function listSessions(projectPath: string): SessionInfo[] {
         const lines = content.split("\n").filter((l) => l.trim());
         messageCount = lines.length;
 
-        // Read first few lines for metadata
-        for (const line of lines.slice(0, 30)) {
+        // Scan all lines for usage totals + first few for metadata
+        for (let li = 0; li < lines.length; li++) {
           try {
-            const obj = JSON.parse(sanitize(line));
-            if (obj.type === "user" && !firstMessage && obj.message?.content) {
-              const c = obj.message.content;
-              firstMessage =
-                typeof c === "string" ? c.slice(0, 120) :
-                Array.isArray(c) ? (c.find((b: { type: string; text?: string }) => b.type === "text")?.text || "").slice(0, 120) : "";
+            const obj = JSON.parse(sanitize(lines[li]));
+            // Metadata: only from first 30 lines
+            if (li < 30) {
+              if (obj.type === "user" && !firstMessage && obj.message?.content) {
+                const c = obj.message.content;
+                firstMessage =
+                  typeof c === "string" ? c.slice(0, 120) :
+                  Array.isArray(c) ? (c.find((b: { type: string; text?: string }) => b.type === "text")?.text || "").slice(0, 120) : "";
+              }
+              if (obj.type === "assistant" && obj.message?.model && !model) {
+                model = obj.message.model;
+              }
             }
-            if (obj.type === "assistant" && obj.message?.model && !model) {
-              model = obj.message.model;
-            }
+            // Usage: accumulate from ALL lines
             const usage = obj.message?.usage;
             if (usage) {
               totalInput += usage.input_tokens || 0;
