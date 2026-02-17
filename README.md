@@ -136,25 +136,30 @@ dashboard/
 - [ ] **Telegram Bot** — Mobile control & notifications / 移动端控制与通知
 - [ ] **Docker Integration / Docker 集成** — Automated task execution in isolated containers / 隔离容器中执行任务
 
-### Phase 6: Financial Market Analysis / 金融行情分析
+### Extra Toolkits / 额外工具库
+
+> Independent modules that extend the platform beyond Claude Code management.
+> 独立于 Claude Code 管理的扩展工具模块。
+
+#### Financial Market Analysis / 金融行情分析
 - [ ] **Precious Metals / 贵金属** — Real-time gold & silver price tracking, trend analysis / 黄金白银实时行情与趋势分析
 - [ ] **Crypto / 加密货币** — Bitcoin and major crypto monitoring, alerts / 比特币等主流币监控与提醒
 - [ ] **Stock Indices / 股指分析** — Major indices (S&P 500, NASDAQ, CSI 300, HSI) analysis & dashboards / 主要股指（标普、纳斯达克、沪深300、恒生）分析看板
 
-### Phase 7: Video & Media Pipeline / 视频与媒体流水线
+#### Video & Media Pipeline / 视频与媒体流水线
 - [ ] **Video Info Extraction / 视频信息抓取** — Extract metadata, transcripts, key frames from videos / 提取视频元数据、字幕、关键帧
 - [ ] **Video Generation / 视频生成** — AI-powered video content generation / AI 视频内容生成
 - [ ] **Video Editing / 视频剪辑** — Automated editing, clipping, compositing / 自动剪辑、裁剪、合成
 - [ ] **Mobile Media Upload / 手机媒体上传** — Send photos & videos from mobile, trigger processing pipelines / 手机端发送图片视频，触发处理流水线
 
-### Phase 8: Multi-Platform Content Hub / 多平台内容中心
+#### Multi-Platform Content Hub / 多平台内容中心
 - [ ] **GitHub Integration** — Repo tracking, star/fork alerts, release monitoring / 仓库追踪、Star/Fork 提醒、Release 监控
 - [ ] **Xiaohongshu (RED) / 小红书** — Content management, trend analysis, auto-publish / 内容管理、趋势分析、自动发布
 - [ ] **Hugging Face** — Model & dataset tracking, paper alerts / 模型和数据集追踪、论文提醒
 - [ ] **Paper Management / 论文管理** — ArXiv/Semantic Scholar paper collection, categorization, push notifications / 论文收集、分类、推送通知
 - [ ] **Smart Categorization & Push / 智能分类推送** — AI-powered content routing to relevant channels / AI 内容分类路由至相关频道
 
-### Phase 9: Unified API Management Platform / API 大一统管理中台
+#### Unified API Management Platform / API 大一统管理中台
 - [ ] **API Usage Dashboard / API 用量看板** — Centralized view of all API keys & usage across providers / 集中查看所有 API Key 及各平台用量
 - [ ] **Cost Analytics / 费用分析** — Cross-provider cost breakdown, trends, forecasting / 跨平台费用明细、趋势、预测
 - [ ] **Usage Statistics / 使用统计** — Request counts, latency, error rates, model comparison / 请求量、延迟、错误率、模型对比
