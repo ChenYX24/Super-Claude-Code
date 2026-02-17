@@ -11,7 +11,9 @@ import {
   ChevronsUp, ChevronsDown, MapPin, FileText, DollarSign,
   LayoutGrid, List, Zap, Moon, Archive, AlertCircle,
   Terminal, Globe, Users, Edit3, Eye, Search, ArrowUpDown, X,
+  Monitor, SquareTerminal,
 } from "lucide-react";
+import { TerminalView } from "@/components/terminal-view";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -630,12 +632,16 @@ function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch }: { msg: 
                           )}
                           <div>
                             <div className="text-[10px] text-muted-foreground mb-0.5">Changes:</div>
-                            <div className="bg-red-50 dark:bg-red-950/30 border-l-2 border-red-400 px-2 py-1 font-mono text-xs text-red-700 dark:text-red-400">
-                              - {parsedInput.old_string.slice(0, 150)}
-                            </div>
-                            <div className="bg-green-50 dark:bg-green-950/30 border-l-2 border-green-400 px-2 py-1 font-mono text-xs text-green-700 dark:text-green-400 mt-0.5">
-                              + {parsedInput.new_string.slice(0, 150)}
-                            </div>
+                            <pre className="bg-red-50 dark:bg-red-950/30 border-l-2 border-red-400 px-2 py-1 font-mono text-xs text-red-700 dark:text-red-400 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                              {parsedInput.old_string.split("\n").map((line: string, li: number) => (
+                                <div key={li}>- {line}</div>
+                              ))}
+                            </pre>
+                            <pre className="bg-green-50 dark:bg-green-950/30 border-l-2 border-green-400 px-2 py-1 font-mono text-xs text-green-700 dark:text-green-400 mt-0.5 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                              {parsedInput.new_string.split("\n").map((line: string, li: number) => (
+                                <div key={li}>+ {line}</div>
+                              ))}
+                            </pre>
                           </div>
                         </div>
                       ) : tool.name === "Read" && parsedInput.file_path ? (
@@ -704,6 +710,12 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [convSearch, setConvSearch] = useState("");
   const [convSearchMatch, setConvSearchMatch] = useState(0);
+  const [viewMode, setViewMode] = useState<"card" | "terminal">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("session-view-mode") as "card" | "terminal") || "card";
+    }
+    return "card";
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -791,6 +803,25 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          {/* View mode toggle */}
+          <div className="flex items-center gap-0.5 border rounded-md p-0.5 mr-1">
+            <Button
+              variant={viewMode === "card" ? "default" : "ghost"}
+              size="sm" className="h-6 w-6 p-0"
+              onClick={() => { setViewMode("card"); localStorage.setItem("session-view-mode", "card"); }}
+              title="Card View"
+            >
+              <Monitor className="h-3 w-3" />
+            </Button>
+            <Button
+              variant={viewMode === "terminal" ? "default" : "ghost"}
+              size="sm" className="h-6 w-6 p-0"
+              onClick={() => { setViewMode("terminal"); localStorage.setItem("session-view-mode", "terminal"); }}
+              title="Terminal View"
+            >
+              <SquareTerminal className="h-3 w-3" />
+            </Button>
+          </div>
           <Button variant={showTools ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => setShowTools(!showTools)}>
             <Wrench className="h-3 w-3 mr-1" />Tools
           </Button>
@@ -848,7 +879,15 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
         )}
       </div>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* Terminal View Mode */}
+      {viewMode === "terminal" && detail && (
+        <div className="flex-1 overflow-hidden relative">
+          <TerminalView detail={detail} />
+        </div>
+      )}
+
+      {/* Card View Mode */}
+      {viewMode === "card" && (<div className="flex flex-1 overflow-hidden">
         {/* Sidebar: checkpoints or files */}
         {(showCheckpoints || showFiles) && (
           <div className="w-64 border-r overflow-auto bg-muted/5 flex-shrink-0">
@@ -946,7 +985,7 @@ function SessionDetailView({ projectPath, sessionId, onBack }: {
             </div>
           </div>
         )}
-      </div>
+      </div>)}
     </div>
   );
 }

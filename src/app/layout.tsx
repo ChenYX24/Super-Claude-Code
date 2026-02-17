@@ -8,9 +8,10 @@ import {
   Clock,
   Coins,
   FileEdit,
-  Plug,
+  Wrench,
   Settings,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +33,7 @@ const navItems = [
   { href: "/team", label: "Team Board", icon: Users },
   { href: "/sessions", label: "Sessions", icon: Clock },
   { href: "/tokens", label: "Tokens", icon: Coins },
-  { href: "/mcp", label: "MCP Servers", icon: Plug },
+  { href: "/toolbox", label: "Toolbox", icon: Wrench },
   { href: "/editor", label: "CLAUDE.md", icon: FileEdit },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -43,7 +44,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('theme');
+                  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  if (theme === 'dark' || (!theme && prefersDark)) {
+                    document.documentElement.classList.add('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
@@ -66,8 +84,9 @@ export default function RootLayout({
                 </Link>
               ))}
             </nav>
-            <div className="text-xs text-muted-foreground pt-4 border-t">
-              v0.1.0 MVP
+            <div className="flex items-center justify-between pt-4 border-t">
+              <span className="text-xs text-muted-foreground">v0.4.0</span>
+              <ThemeToggle />
             </div>
           </aside>
 

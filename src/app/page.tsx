@@ -3,8 +3,14 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, ListTodo, CheckCircle, FolderOpen } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Users, ListTodo, CheckCircle, FolderOpen, Cpu, Clock,
+  ArrowRight, Wrench, FileEdit, Coins, Zap, Activity,
+} from "lucide-react";
 import Link from "next/link";
+
+// ---- Types ----
 
 interface TeamSummary {
   teams: {
@@ -18,27 +24,106 @@ interface TeamSummary {
   }[];
 }
 
+interface ProcessInfo {
+  pid: number;
+  name: string;
+  startTime: string;
+  memoryMB: number;
+  command?: string;
+}
+
+interface SessionInfo {
+  id: string;
+  project: string;
+  projectName: string;
+  startTime: number;
+  lastActive: number;
+  messageCount: number;
+  firstMessage?: string;
+  model?: string;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  estimatedCost: number;
+  status?: string;
+}
+
+interface SessionsData {
+  totalSessions: number;
+  recentSessions: SessionInfo[];
+}
+
+// ---- Helpers ----
+
+function timeAgo(ms: number) {
+  if (!ms) return "";
+  const diff = Date.now() - ms;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function fmtCost(n: number): string {
+  return "$" + n.toFixed(2);
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
+  return n.toString();
+}
+
+function shortModel(m?: string) {
+  if (!m) return "";
+  if (m.includes("opus")) return "Opus";
+  if (m.includes("sonnet")) return "Sonnet";
+  if (m.includes("haiku")) return "Haiku";
+  return m;
+}
+
+type SessionStatus = "reading" | "thinking" | "writing" | "waiting" | "completed" | "error" | "idle";
+
+const STATUS_DOTS: Record<SessionStatus, string> = {
+  reading: "bg-cyan-400",
+  thinking: "bg-orange-400",
+  writing: "bg-purple-400",
+  waiting: "bg-yellow-400",
+  completed: "bg-green-400",
+  error: "bg-red-500",
+  idle: "bg-zinc-500",
+};
+
+// ---- Main ----
+
 export default function HomePage() {
-  const [data, setData] = useState<TeamSummary | null>(null);
+  const [teams, setTeams] = useState<TeamSummary | null>(null);
+  const [processes, setProcesses] = useState<ProcessInfo[]>([]);
+  const [sessions, setSessions] = useState<SessionsData | null>(null);
 
   useEffect(() => {
-    fetch("/api/teams")
-      .then((r) => r.json())
-      .then(setData);
+    fetch("/api/teams").then((r) => r.json()).then(setTeams).catch(() => {});
+    fetch("/api/processes").then((r) => r.json()).then((d) => setProcesses(d.processes || [])).catch(() => {});
+    fetch("/api/sessions").then((r) => r.json()).then(setSessions).catch(() => {});
   }, []);
 
-  const totalTeams = data?.teams.length || 0;
-  const totalAgents = data?.teams.reduce((s, t) => s + t.memberCount, 0) || 0;
-  const totalTasks = data?.teams.reduce((s, t) => s + t.taskCount, 0) || 0;
-  const completedTasks =
-    data?.teams.reduce((s, t) => s + t.completedTasks, 0) || 0;
+  const totalTeams = teams?.teams.length || 0;
+  const totalAgents = teams?.teams.reduce((s, t) => s + t.memberCount, 0) || 0;
+  const totalTasks = teams?.teams.reduce((s, t) => s + t.taskCount, 0) || 0;
+  const completedTasks = teams?.teams.reduce((s, t) => s + t.completedTasks, 0) || 0;
+
+  const recentSessions = sessions?.recentSessions.slice(0, 5) || [];
+  const totalCost = sessions?.recentSessions.reduce((s, x) => s + x.estimatedCost, 0) || 0;
+  const totalInputTokens = sessions?.recentSessions.reduce((s, x) => s + x.totalInputTokens, 0) || 0;
+  const totalOutputTokens = sessions?.recentSessions.reduce((s, x) => s + x.totalOutputTokens, 0) || 0;
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Overview</h1>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
@@ -79,59 +164,208 @@ export default function HomePage() {
             <div className="text-3xl font-bold">{completedTasks}</div>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Cpu className="h-4 w-4" /> Processes
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{processes.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+              <Coins className="h-4 w-4" /> Total Cost
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{fmtCost(totalCost)}</div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Team List */}
-      <div>
-        <h2 className="text-lg font-semibold mb-3">Active Teams</h2>
-        {data && data.teams.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {data.teams.map((team) => (
-              <Link key={team.name} href={`/team?name=${encodeURIComponent(team.name)}`}>
-                <Card className="transition-all hover:shadow-md cursor-pointer">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">{team.name}</CardTitle>
-                      <Badge variant="outline">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Active Processes */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-4 w-4" /> Active Processes
+              </CardTitle>
+              {processes.length > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  <Zap className="h-3 w-3 mr-1" />{processes.length} running
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {processes.length > 0 ? (
+              <div className="space-y-2">
+                {processes.map((p) => (
+                  <div key={p.pid} className="flex items-center justify-between text-sm bg-muted/30 rounded-md px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                      <span className="font-mono text-xs">{p.name}</span>
+                      <span className="text-xs text-muted-foreground">PID {p.pid}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">{p.memoryMB}MB</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No active Claude processes detected</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Token Usage Summary */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Coins className="h-4 w-4" /> Token Usage Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">Input Tokens</div>
+                <div className="text-lg font-bold font-mono">{fmtTokens(totalInputTokens)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">Output Tokens</div>
+                <div className="text-lg font-bold font-mono">{fmtTokens(totalOutputTokens)}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-muted-foreground mb-1">Total Sessions</div>
+                <div className="text-lg font-bold font-mono">{sessions?.totalSessions || 0}</div>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Estimated Total Cost</span>
+                <span className="font-bold font-mono">{fmtCost(totalCost)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Sessions */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" /> Recent Sessions
+            </CardTitle>
+            <Link href="/sessions">
+              <Button variant="ghost" size="sm" className="text-xs">
+                View all <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {recentSessions.length > 0 ? (
+            <div className="space-y-1.5">
+              {recentSessions.map((s) => {
+                const status = (s.status || "idle") as SessionStatus;
+                const dot = STATUS_DOTS[status] || STATUS_DOTS.idle;
+                return (
+                  <Link key={`${s.project}-${s.id}`} href={`/sessions?session=${s.id}`}>
+                    <div className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors">
+                      <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${dot}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{s.firstMessage || s.id.slice(0, 12)}</div>
+                        <div className="text-xs text-muted-foreground truncate">{s.projectName}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {s.model && <Badge variant="secondary" className="text-[10px] h-4">{shortModel(s.model)}</Badge>}
+                        <span className="text-xs text-muted-foreground">{timeAgo(s.lastActive)}</span>
+                        <span className="text-xs font-mono text-muted-foreground">{fmtCost(s.estimatedCost)}</span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No sessions found</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions + Active Teams */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Quick Actions */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/sessions">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <Clock className="h-4 w-4" /> Sessions
+                </Button>
+              </Link>
+              <Link href="/toolbox">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <Wrench className="h-4 w-4" /> Toolbox
+                </Button>
+              </Link>
+              <Link href="/editor">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <FileEdit className="h-4 w-4" /> CLAUDE.md
+                </Button>
+              </Link>
+              <Link href="/tokens">
+                <Button variant="outline" className="w-full justify-start gap-2 h-10">
+                  <Coins className="h-4 w-4" /> Tokens
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Active Teams */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="h-4 w-4" /> Active Teams
+              </CardTitle>
+              <Link href="/team">
+                <Button variant="ghost" size="sm" className="text-xs">
+                  View all <ArrowRight className="h-3 w-3 ml-1" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {teams && teams.teams.length > 0 ? (
+              <div className="space-y-2">
+                {teams.teams.slice(0, 3).map((team) => (
+                  <Link key={team.name} href={`/team?name=${encodeURIComponent(team.name)}`}>
+                    <div className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted/50 transition-colors">
+                      <div>
+                        <div className="text-sm font-medium">{team.name}</div>
+                        <div className="text-xs text-muted-foreground">{team.memberCount} agents</div>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
                         {team.completedTasks}/{team.taskCount} tasks
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {team.description}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex gap-4 text-sm text-muted-foreground">
-                      <span>
-                        <Users className="h-3 w-3 inline mr-1" />
-                        {team.memberCount} agents
-                      </span>
-                      <span>
-                        created{" "}
-                        {new Date(team.activeSince).toLocaleDateString("zh-CN")}
-                      </span>
-                    </div>
-                    {/* Progress bar */}
-                    <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{
-                          width: `${team.taskCount > 0 ? (team.completedTasks / team.taskCount) * 100 : 0}%`,
-                        }}
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">
-              暂无活跃 Team。使用 Claude Code 的 TeamCreate 创建一个。
-            </CardContent>
-          </Card>
-        )}
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No active teams</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
