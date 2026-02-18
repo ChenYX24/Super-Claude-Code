@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownContent } from "@/components/markdown-content";
 import { TOOL_CONFIG, DEFAULT_TOOL_CONFIG } from "@/components/sessions/conv-message";
 import type { SessionInfo, SessionDetail, SessionMessage } from "@/components/sessions/types";
@@ -23,6 +24,7 @@ export default function ChatPage() {
   const [selectedSessionKey, setSelectedSessionKey] = useState<string>("");
   const [sessionDetail, setSessionDetail] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingSessions, setLoadingSessions] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -37,6 +39,8 @@ export default function ChatPage() {
         setSessions(data.recentSessions || []);
       } catch (err) {
         console.error("Failed to fetch sessions:", err);
+      } finally {
+        setLoadingSessions(false);
       }
     };
     fetchSessions();
@@ -126,40 +130,44 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-screen">
       {/* Top bar */}
-      <div className="border-b bg-card px-4 py-3 flex items-center gap-4 flex-shrink-0">
+      <div className="border-b bg-card px-4 py-3 flex items-center gap-2 md:gap-4 flex-shrink-0 flex-wrap">
         <MessageCircle className="h-5 w-5 text-primary" />
         <h1 className="text-lg font-semibold">Chat</h1>
 
         {/* Session selector */}
-        <div className="flex-1 max-w-md">
-          <Select value={selectedSessionKey} onValueChange={setSelectedSessionKey}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select a session..." />
-            </SelectTrigger>
-            <SelectContent>
-              {sessions.map((session) => (
-                <SelectItem key={`${session.project}|${session.id}`} value={`${session.project}|${session.id}`}>
-                  <div className="flex flex-col items-start">
-                    <div className="font-medium">
-                      {session.firstMessage?.slice(0, 60) || session.projectName}
+        <div className="flex-1 w-full md:w-auto md:max-w-md">
+          {loadingSessions ? (
+            <Skeleton className="h-9 w-full" />
+          ) : (
+            <Select value={selectedSessionKey} onValueChange={setSelectedSessionKey}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a session..." />
+              </SelectTrigger>
+              <SelectContent>
+                {sessions.map((session) => (
+                  <SelectItem key={`${session.project}|${session.id}`} value={`${session.project}|${session.id}`}>
+                    <div className="flex flex-col items-start">
+                      <div className="font-medium">
+                        {session.firstMessage?.slice(0, 60) || session.projectName}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {session.projectName} • {new Date(session.lastActive).toLocaleDateString()}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {session.projectName} • {new Date(session.lastActive).toLocaleDateString()}
-                    </div>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {/* Session info */}
         {sessionDetail && (
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex items-center gap-2 ml-auto flex-wrap">
             {sessionDetail.model && (
               <Badge variant="secondary">{shortModel(sessionDetail.model)}</Badge>
             )}
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">
               {fmtCost(sessionDetail.estimatedCost)}
             </span>
           </div>
@@ -173,8 +181,10 @@ export default function ChatPage() {
         className="flex-1 overflow-y-auto"
       >
         {loading && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-muted-foreground">Loading session...</div>
+          <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+            <ChatMessageSkeleton />
+            <ChatMessageSkeleton isUser />
+            <ChatMessageSkeleton />
           </div>
         )}
 
@@ -259,7 +269,7 @@ function ChatMessage({ msg }: { msg: SessionMessage }) {
         <div className="mb-3 max-w-[80%]">
           <button
             onClick={() => setThinkingExpanded(!thinkingExpanded)}
-            className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 hover:underline mb-1"
+            className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 hover:underline mb-1 cursor-pointer"
           >
             <Brain className="h-3.5 w-3.5" />
             <span className="italic">Thinking...</span>
@@ -274,8 +284,8 @@ function ChatMessage({ msg }: { msg: SessionMessage }) {
       )}
 
       {/* Message bubble */}
-      <div className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
-        <div className={`flex gap-3 max-w-[80%] ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+      <div className={`flex gap-2 md:gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+        <div className={`flex gap-2 md:gap-3 max-w-[95%] sm:max-w-[85%] md:max-w-[80%] ${isUser ? "flex-row-reverse" : "flex-row"}`}>
           {/* Avatar */}
           <div
             className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -328,7 +338,7 @@ function ChatMessage({ msg }: { msg: SessionMessage }) {
                       {/* Tool header */}
                       <button
                         onClick={() => toggleToolExpanded(i)}
-                        className="w-full px-3 py-2 flex items-center gap-2 hover:opacity-80 transition-opacity"
+                        className="w-full px-3 py-2 flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
                       >
                         <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${config.color}`} />
                         <span className={`font-mono font-semibold ${config.color}`}>
@@ -393,6 +403,35 @@ function ChatMessage({ msg }: { msg: SessionMessage }) {
                 {msg.cacheRead ? ` / ${fmtTokens(msg.cacheRead)}cache` : ""}
               </div>
             )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Skeleton for loading messages
+function ChatMessageSkeleton({ isUser = false }: { isUser?: boolean }) {
+  return (
+    <div className="mb-6">
+      <div className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
+        <div className={`flex gap-3 max-w-[80%] ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+          {/* Avatar skeleton */}
+          <Skeleton className="h-8 w-8 rounded-full flex-shrink-0" />
+
+          {/* Message content skeleton */}
+          <div className="flex-1 min-w-0 space-y-2">
+            {/* Header skeleton */}
+            <div className={`flex items-center gap-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-12" />
+            </div>
+
+            {/* Message bubble skeleton */}
+            <Skeleton className="h-24 w-full rounded-2xl" />
+
+            {/* Token info skeleton */}
+            <Skeleton className={`h-3 w-32 ${isUser ? "ml-auto" : ""}`} />
           </div>
         </div>
       </div>

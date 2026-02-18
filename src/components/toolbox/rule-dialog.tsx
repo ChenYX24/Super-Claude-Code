@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/toast";
-import { BookOpen, X } from "lucide-react";
+import { MarkdownContent } from "@/components/markdown-content";
+import { BookOpen, X, Eye, Pencil } from "lucide-react";
 
 interface RuleInfo {
   name: string;
@@ -28,12 +29,14 @@ export function RuleDialog({ open, onClose, mode, rule, existingGroups, onSucces
   const [name, setName] = useState(rule?.name || "");
   const [content, setContent] = useState(rule?.content || "# Rule Title\n\nRule content here...");
   const [submitting, setSubmitting] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
 
   useEffect(() => {
     if (open) {
       setGroup(rule?.group || "common");
       setName(rule?.name || "");
       setContent(rule?.content || "# Rule Title\n\nRule content here...");
+      setPreviewMode(false);
     }
   }, [open, rule]);
 
@@ -158,13 +161,39 @@ export function RuleDialog({ open, onClose, mode, rule, existingGroups, onSucces
           </div>
 
           <div>
-            <label className="text-sm font-medium block mb-1.5">Content *</label>
-            <textarea
-              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background min-h-[400px] resize-y"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              spellCheck={false}
-            />
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium">Content *</label>
+              <div className="flex rounded-md border overflow-hidden">
+                <button
+                  className={`px-3 py-1 text-xs flex items-center gap-1 transition-colors ${
+                    !previewMode ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                  }`}
+                  onClick={() => setPreviewMode(false)}
+                >
+                  <Pencil className="h-3 w-3" /> Edit
+                </button>
+                <button
+                  className={`px-3 py-1 text-xs flex items-center gap-1 transition-colors ${
+                    previewMode ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                  }`}
+                  onClick={() => setPreviewMode(true)}
+                >
+                  <Eye className="h-3 w-3" /> Preview
+                </button>
+              </div>
+            </div>
+            {previewMode ? (
+              <div className="w-full px-3 py-2 border rounded-md bg-background min-h-[400px] overflow-auto">
+                <MarkdownContent content={content} className="text-sm" />
+              </div>
+            ) : (
+              <textarea
+                className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background min-h-[400px] resize-y"
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                spellCheck={false}
+              />
+            )}
             <p className="text-xs text-muted-foreground mt-1">
               Markdown content for the rule
             </p>

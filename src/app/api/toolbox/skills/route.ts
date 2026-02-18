@@ -78,6 +78,58 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// PUT - Update existing skill
+export async function PUT(req: NextRequest) {
+  try {
+    const body: SkillRequestBody = await req.json();
+    const { name, content } = body;
+
+    if (!name || content === undefined) {
+      return NextResponse.json(
+        { error: "Missing required fields: name, content" },
+        { status: 400 }
+      );
+    }
+
+    if (name.includes("/") || name.includes("\\") || name.includes("..")) {
+      return NextResponse.json(
+        { error: "Invalid skill name." },
+        { status: 400 }
+      );
+    }
+
+    const skillDir = path.join(SKILLS_DIR, name);
+    const skillPath = path.join(skillDir, "SKILL.md");
+
+    if (!validateSkillPath(skillPath)) {
+      return NextResponse.json(
+        { error: "Invalid path" },
+        { status: 400 }
+      );
+    }
+
+    if (!fs.existsSync(skillPath)) {
+      return NextResponse.json(
+        { error: `Skill "${name}" not found` },
+        { status: 404 }
+      );
+    }
+
+    fs.writeFileSync(skillPath, content, "utf-8");
+
+    return NextResponse.json({
+      success: true,
+      message: `Skill "${name}" updated successfully`,
+    });
+  } catch (error) {
+    console.error("Error updating skill:", error);
+    return NextResponse.json(
+      { error: "Failed to update skill" },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE - Remove skill
 export async function DELETE(req: NextRequest) {
   try {

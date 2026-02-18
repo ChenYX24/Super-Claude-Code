@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronRight,
   ArrowRight,
+  ArrowLeft,
   Crown,
   Search,
   Microscope,
@@ -22,8 +23,10 @@ import {
   ChevronsDown,
   ChevronUp,
   Terminal,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import Link from "next/link";
 import { shortModel } from "@/lib/format-utils";
 
@@ -94,6 +97,21 @@ function formatTime(ts: string) {
   } catch {
     return "";
   }
+}
+
+function formatRelativeTime(epochMs: number): string {
+  const now = Date.now();
+  const diffMs = now - epochMs;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDay < 30) return `${diffDay}d ago`;
+  return new Date(epochMs).toLocaleDateString();
 }
 
 // Agent type → icon + color
@@ -475,12 +493,144 @@ function TeamSelector({
   );
 }
 
+// ---- Team Overview Grid ----
+
+function TeamOverview({
+  teams,
+  onSelectTeam,
+  onRefresh,
+}: {
+  teams: TeamSummaryItem[];
+  onSelectTeam: (name: string) => void;
+  onRefresh: () => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filtered = searchQuery.trim()
+    ? teams.filter(
+        (t) =>
+          t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          t.description.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : teams;
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-3rem)]">
+      {/* Top bar */}
+      <div className="flex items-center gap-3 px-6 py-4 border-b">
+        <Users className="h-5 w-5 text-primary" />
+        <h1 className="text-lg font-semibold">Team Board</h1>
+        <Badge variant="secondary" className="text-xs">
+          {teams.length} {teams.length === 1 ? "team" : "teams"}
+        </Badge>
+        <div className="ml-auto">
+          <Button variant="outline" size="sm" onClick={onRefresh}>
+            <RefreshCw className="h-4 w-4 mr-1.5" />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="px-6 pt-4 pb-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search teams by name or description..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 text-sm rounded-lg border bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+          />
+        </div>
+      </div>
+
+      {/* Card grid */}
+      <div className="flex-1 overflow-auto px-6 py-4">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <Search className="h-10 w-10 mb-3 opacity-40" />
+            <p className="text-sm">No teams match your search</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((team) => {
+              const progress =
+                team.taskCount > 0
+                  ? Math.round((team.completedTasks / team.taskCount) * 100)
+                  : 0;
+
+              return (
+                <Card
+                  key={team.name}
+                  className="cursor-pointer hover:shadow-md hover:border-primary/30 transition-all py-0 gap-0"
+                  onClick={() => onSelectTeam(team.name)}
+                >
+                  <CardContent className="p-4">
+                    {/* Header */}
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Users className="h-5 w-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-semibold truncate">
+                          {team.name}
+                        </h3>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                          {team.description || "No description"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Stats row */}
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3">
+                      <span className="flex items-center gap-1">
+                        <Bot className="h-3.5 w-3.5" />
+                        {team.memberCount} {team.memberCount === 1 ? "agent" : "agents"}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <ListTodo className="h-3.5 w-3.5" />
+                        {team.completedTasks}/{team.taskCount} tasks
+                      </span>
+                      <span className="flex items-center gap-1 ml-auto">
+                        <Clock className="h-3.5 w-3.5" />
+                        {formatRelativeTime(team.activeSince)}
+                      </span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Progress</span>
+                        <span className="font-medium">{progress}%</span>
+                      </div>
+                      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-primary rounded-full transition-all duration-500"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---- Main Page ----
 
 function TeamPageInner() {
   const searchParams = useSearchParams();
   const urlTeamName = searchParams.get("name");
 
+  const [viewMode, setViewMode] = useState<"overview" | "detail">(
+    urlTeamName ? "detail" : "overview"
+  );
   const [teamList, setTeamList] = useState<TeamSummary | null>(null);
   const [activeTeam, setActiveTeam] = useState("");
   const [teamData, setTeamData] = useState<TeamData | null>(null);
@@ -494,22 +644,28 @@ function TeamPageInner() {
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const initialTeamSet = useRef(false);
 
-  useEffect(() => {
+  const fetchTeamList = () => {
     fetch("/api/teams")
       .then((r) => r.json())
       .then((d: TeamSummary) => {
         setTeamList(d);
         if (!initialTeamSet.current && d.teams.length > 0) {
-          // Use URL param if provided and valid, otherwise use first team
-          const target = urlTeamName && d.teams.some((t) => t.name === urlTeamName)
-            ? urlTeamName
-            : d.teams[0].name;
-          setActiveTeam(target);
+          // Only go to detail mode if URL has ?name=xxx and that team exists
+          if (urlTeamName && d.teams.some((t) => t.name === urlTeamName)) {
+            setActiveTeam(urlTeamName);
+            setViewMode("detail");
+          }
+          // Otherwise stay in overview mode with no team selected
           initialTeamSet.current = true;
         }
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchTeamList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlTeamName]);
 
   useEffect(() => {
@@ -548,6 +704,23 @@ function TeamPageInner() {
       </div>
     );
 
+  // -- Overview mode --
+  if (viewMode === "overview") {
+    return (
+      <TeamOverview
+        teams={teamList.teams}
+        onSelectTeam={(name) => {
+          setActiveTeam(name);
+          setSelectedAgent("");
+          setSelectedMsgIdx(null);
+          setViewMode("detail");
+        }}
+        onRefresh={fetchTeamList}
+      />
+    );
+  }
+
+  // -- Detail mode --
   const tasks = teamData?.tasks || [];
   const messages = teamData?.messages || [];
   const members = teamData?.config?.members || [];
@@ -582,6 +755,17 @@ function TeamPageInner() {
     <div className="flex h-[calc(100vh-3rem)]">
       {/* Left sidebar */}
       <div className="w-60 border-r flex flex-col bg-muted/5">
+        {/* Back to overview */}
+        <div className="px-2 pt-2">
+          <button
+            className="flex items-center gap-1.5 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted/60 transition-colors w-full"
+            onClick={() => setViewMode("overview")}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            <span>All Teams</span>
+          </button>
+        </div>
+
         {/* Team selector dropdown */}
         <div className="p-2 border-b">
           <TeamSelector

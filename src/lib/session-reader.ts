@@ -64,6 +64,8 @@ export interface SessionMessage {
   outputTokens?: number;
   cacheRead?: number;
   thinkingContent?: string;
+  /** Original content array from JSONL; required unchanged for last assistant message when calling Anthropic API. */
+  rawContent?: unknown[];
   isCheckpoint?: boolean; // user messages = checkpoints
 }
 
@@ -339,6 +341,10 @@ export function getSessionDetail(
           });
         }
 
+        // Preserve raw content for assistant messages so API "continue" can send it unchanged (thinking/redacted_thinking must not be modified)
+        const rawContent =
+          msg.role === "assistant" && Array.isArray(msg.content) ? (msg.content as unknown[]) : undefined;
+
         messages.push({
           uuid: obj.uuid || "",
           parentUuid: obj.parentUuid || null,
@@ -352,6 +358,7 @@ export function getSessionDetail(
           outputTokens: usage?.output_tokens,
           cacheRead: usage?.cache_read_input_tokens,
           thinkingContent: thinkingContent ? sanitize(thinkingContent.slice(0, 800)) : undefined,
+          rawContent,
           isCheckpoint: isUser && !!textContent.trim(),
         });
       } catch { /* skip */ }

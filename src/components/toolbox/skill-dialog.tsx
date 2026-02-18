@@ -2,49 +2,47 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/toast";
 import { MarkdownContent } from "@/components/markdown-content";
-import { Bot, X, Eye, Pencil } from "lucide-react";
+import { useToast } from "@/components/toast";
+import { Sparkles, X, Eye, Pencil } from "lucide-react";
 
-interface AgentInfo {
+interface SkillInfo {
   name: string;
   description: string;
   content: string;
   path: string;
 }
 
-interface AgentDialogProps {
+interface SkillDialogProps {
   open: boolean;
   onClose: () => void;
   mode: "add" | "edit";
-  agent: AgentInfo | null;
+  skill: SkillInfo | null;
   onSuccess: () => void;
 }
 
-const AGENT_TEMPLATE = `---
-name: agent-name
-description: What this agent does
-model: sonnet
----
+const SKILL_TEMPLATE = `# Skill Name
 
-# Instructions
+Description of what this skill does.
 
-Describe the agent's behavior here.`;
+## Instructions
 
-export function AgentDialog({ open, onClose, mode, agent, onSuccess }: AgentDialogProps) {
+Describe the skill's behavior here.`;
+
+export function SkillDialog({ open, onClose, mode, skill, onSuccess }: SkillDialogProps) {
   const { toast } = useToast();
-  const [name, setName] = useState(agent?.name || "");
-  const [content, setContent] = useState(agent?.content || AGENT_TEMPLATE);
+  const [name, setName] = useState(skill?.name || "");
+  const [content, setContent] = useState(skill?.content || SKILL_TEMPLATE);
   const [submitting, setSubmitting] = useState(false);
   const [previewMode, setPreviewMode] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setName(agent?.name || "");
-      setContent(agent?.content || AGENT_TEMPLATE);
+      setName(skill?.name || "");
+      setContent(skill?.content || SKILL_TEMPLATE);
       setPreviewMode(false);
     }
-  }, [open, agent]);
+  }, [open, skill]);
 
   if (!open) return null;
 
@@ -58,7 +56,7 @@ export function AgentDialog({ open, onClose, mode, agent, onSuccess }: AgentDial
 
     try {
       const method = mode === "add" ? "POST" : "PUT";
-      const res = await fetch("/api/toolbox/agents", {
+      const res = await fetch("/api/toolbox/skills", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: name.trim(), content }),
@@ -67,14 +65,14 @@ export function AgentDialog({ open, onClose, mode, agent, onSuccess }: AgentDial
       const data = await res.json();
 
       if (res.ok) {
-        toast(data.message || `Agent ${mode === "add" ? "created" : "updated"} successfully`, "success");
+        toast(data.message || `Skill ${mode === "add" ? "created" : "updated"} successfully`, "success");
         onSuccess();
         onClose();
       } else {
         toast(data.error || "Operation failed", "error");
       }
     } catch (error) {
-      toast("Failed to save agent", "error");
+      toast("Failed to save skill", "error");
     } finally {
       setSubmitting(false);
     }
@@ -88,8 +86,8 @@ export function AgentDialog({ open, onClose, mode, agent, onSuccess }: AgentDial
       >
         <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-background z-10">
           <h2 className="text-lg font-bold flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
-            {mode === "add" ? "Create Agent" : "Edit Agent"}
+            <Sparkles className="h-5 w-5 text-amber-500" />
+            {mode === "add" ? "Create Skill" : "Edit Skill"}
           </h2>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
             <X className="h-4 w-4" />
@@ -98,17 +96,17 @@ export function AgentDialog({ open, onClose, mode, agent, onSuccess }: AgentDial
 
         <div className="px-6 py-4 space-y-4">
           <div>
-            <label className="text-sm font-medium block mb-1.5">Agent Name *</label>
+            <label className="text-sm font-medium block mb-1.5">Skill Name *</label>
             <input
               type="text"
               className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
-              placeholder="my-agent"
+              placeholder="my-skill"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={mode === "edit"}
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Alphanumeric characters, hyphens, and underscores only
+              Will be saved as ~/.claude/skills/{name || "skill-name"}/SKILL.md
             </p>
           </div>
 
@@ -147,7 +145,7 @@ export function AgentDialog({ open, onClose, mode, agent, onSuccess }: AgentDial
               />
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              Markdown with YAML frontmatter (name, description, model)
+              Markdown content for the skill
             </p>
           </div>
         </div>
@@ -157,7 +155,7 @@ export function AgentDialog({ open, onClose, mode, agent, onSuccess }: AgentDial
             Cancel
           </Button>
           <Button size="sm" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? "Saving..." : mode === "add" ? "Create Agent" : "Update Agent"}
+            {submitting ? "Saving..." : mode === "add" ? "Create Skill" : "Update Skill"}
           </Button>
         </div>
       </div>
