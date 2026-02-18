@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/components/toast";
 import {
   Settings as SettingsIcon,
   Shield,
@@ -12,6 +14,7 @@ import {
   XCircle,
   Eye,
   EyeOff,
+  Save,
 } from "lucide-react";
 import type { ClaudeSettings, EnvironmentInfo } from "@/lib/settings-reader";
 
@@ -25,12 +28,93 @@ interface SettingsResponse {
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
+  // Editable fields
+  const [defaultModel, setDefaultModel] = useState("");
+  const [theme, setTheme] = useState("");
+  const [autoUpdate, setAutoUpdate] = useState(true);
+  const [alwaysThinkingEnabled, setAlwaysThinkingEnabled] = useState(true);
+
+  // Track original values to detect changes
+  const [originalValues, setOriginalValues] = useState({
+    defaultModel: "",
+    theme: "",
+    autoUpdate: true,
+    alwaysThinkingEnabled: true,
+  });
+
+  // Track if there are unsaved changes
+  const hasChanges =
+    defaultModel !== originalValues.defaultModel ||
+    theme !== originalValues.theme ||
+    autoUpdate !== originalValues.autoUpdate ||
+    alwaysThinkingEnabled !== originalValues.alwaysThinkingEnabled;
+
+  const [isSaving, setIsSaving] = useState(false);
+
+  const loadSettings = () => {
     fetch("/api/settings")
       .then((r) => r.json())
-      .then(setData);
+      .then((response) => {
+        setData(response);
+        const merged = response.merged;
+
+        // Initialize editable fields
+        const model = merged.defaultModel || "claude-sonnet-4-5-20250929";
+        const themeValue = merged.theme || "system";
+        const autoUpdateValue = merged.autoUpdate ?? true;
+        const thinkingValue = merged.alwaysThinkingEnabled ?? true;
+
+        setDefaultModel(model);
+        setTheme(themeValue);
+        setAutoUpdate(autoUpdateValue);
+        setAlwaysThinkingEnabled(thinkingValue);
+
+        // Store original values
+        setOriginalValues({
+          defaultModel: model,
+          theme: themeValue,
+          autoUpdate: autoUpdateValue,
+          alwaysThinkingEnabled: thinkingValue,
+        });
+      });
+  };
+
+  useEffect(() => {
+    loadSettings();
   }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          defaultModel,
+          theme,
+          autoUpdate,
+          alwaysThinkingEnabled,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        toast("Settings saved successfully", "success");
+        // Reload to get updated values
+        loadSettings();
+      } else {
+        toast(result.error || "Failed to save settings", "error");
+      }
+    } catch (error) {
+      console.error("Save error:", error);
+      toast("Failed to save settings", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   if (!data) {
     return (
@@ -49,9 +133,31 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <SettingsIcon className="h-6 w-6" />
-        <h1 className="text-2xl font-bold">Settings</h1>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <SettingsIcon className="h-6 w-6" />
+          <h1 className="text-2xl font-bold">Settings</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {hasChanges && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+              </span>
+              <span>Unsaved changes</span>
+            </div>
+          )}
+          <Button
+            onClick={handleSave}
+            disabled={!hasChanges || isSaving}
+            variant="default"
+            size="sm"
+          >
+            <Save className="h-4 w-4" />
+            {isSaving ? "Saving..." : "Save"}
+          </Button>
+        </div>
       </div>
 
       {/* General Settings */}
@@ -62,25 +168,94 @@ export default function SettingsPage() {
             General
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <SettingRow
-            label="Default Model"
-            value={merged.defaultModel || "claude-sonnet-4-5"}
-          />
-          <SettingRow
-            label="Theme"
-            value={merged.theme || "system"}
-          />
-          <SettingRow
-            label="Auto Update"
-            value={merged.autoUpdate ?? true}
-            type="boolean"
-          />
-          <SettingRow
-            label="Extended Thinking Enabled"
-            value={merged.alwaysThinkingEnabled ?? true}
-            type="boolean"
-          />
+        <CardContent className="space-y-4">
+          {/* Default Model */}
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-muted-foreground min-w-[180px]">
+              Default Model
+            </div>
+            <select
+              value={defaultModel}
+              onChange={(e) => setDefaultModel(e.target.value)}
+              className="bg-muted border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="claude-opus-4-6">Opus 4.6</option>
+              <option value="claude-sonnet-4-5-20250929">Sonnet 4.5</option>
+              <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
+            </select>
+          </div>
+
+          {/* Theme */}
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-muted-foreground min-w-[180px]">
+              Theme
+            </div>
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              className="bg-muted border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="system">System</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+
+          {/* Auto Update */}
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-muted-foreground min-w-[180px]">
+              Auto Update
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoUpdate}
+                onChange={(e) => setAutoUpdate(e.target.checked)}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-ring"
+              />
+              <Badge variant={autoUpdate ? "default" : "secondary"}>
+                {autoUpdate ? (
+                  <>
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Enabled
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Disabled
+                  </>
+                )}
+              </Badge>
+            </label>
+          </div>
+
+          {/* Extended Thinking Enabled */}
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-muted-foreground min-w-[180px]">
+              Extended Thinking Enabled
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={alwaysThinkingEnabled}
+                onChange={(e) => setAlwaysThinkingEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-ring"
+              />
+              <Badge variant={alwaysThinkingEnabled ? "default" : "secondary"}>
+                {alwaysThinkingEnabled ? (
+                  <>
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Enabled
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Disabled
+                  </>
+                )}
+              </Badge>
+            </label>
+          </div>
         </CardContent>
       </Card>
 

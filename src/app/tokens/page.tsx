@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw, Info, Database, Download,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 import {
   AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, Brush,
 } from "recharts";
 import type { PieLabelRenderProps } from "recharts";
 import { fmtCost, fmtTokens } from "@/lib/format-utils";
@@ -75,9 +76,16 @@ function DailyTooltip({ active, payload, label }: any) {
   );
 }
 
+type TimeRange = "7d" | "14d" | "30d" | "all";
+type ViewMode = "chart" | "table";
+
 export default function TokensPage() {
   const [data, setData] = useState<TokensData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [timeRange, setTimeRange] = useState<TimeRange>("14d");
+  const [viewMode, setViewMode] = useState<ViewMode>("chart");
+  const [tablePage, setTablePage] = useState(0);
+  const TABLE_PAGE_SIZE = 10;
   const { toast } = useToast();
 
   useEffect(() => {
@@ -175,7 +183,7 @@ export default function TokensPage() {
     .sort((a, b) => b.value - a.value);
 
   // Prepare date data for AreaChart (chronological order)
-  const dateData = Object.entries(data.byDate)
+  const allDateData = Object.entries(data.byDate)
     .filter(([k]) => k !== "unknown")
     .sort((a, b) => a[0].localeCompare(b[0])) // Chronological order
     .map(([date, stats]) => ({
@@ -184,8 +192,17 @@ export default function TokensPage() {
       input: stats.input,
       output: stats.output,
       sessions: stats.sessions,
-    }))
-    .slice(-14); // Last 14 days
+    }));
+
+  // Filter by time range
+  const dateData =
+    timeRange === "all"
+      ? allDateData
+      : timeRange === "30d"
+      ? allDateData.slice(-30)
+      : timeRange === "14d"
+      ? allDateData.slice(-14)
+      : allDateData.slice(-7);
 
   return (
     <div className="space-y-6">
@@ -313,42 +330,162 @@ export default function TokensPage() {
 
       {/* Daily Usage - AreaChart */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Daily Cost Trend</CardTitle></CardHeader>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Daily Cost Trend</CardTitle>
+            <div className="flex items-center gap-2">
+              {/* Time Range Selector */}
+              <div className="flex border rounded-md">
+                {(["7d", "14d", "30d", "all"] as TimeRange[]).map((range) => (
+                  <Button
+                    key={range}
+                    variant={timeRange === range ? "default" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs px-2 rounded-none first:rounded-l-md last:rounded-r-md"
+                    onClick={() => { setTimeRange(range); setTablePage(0); }}
+                  >
+                    {range === "all" ? "All" : range.toUpperCase()}
+                  </Button>
+                ))}
+              </div>
+              {/* Chart/Table Toggle */}
+              <div className="flex border rounded-md">
+                <Button
+                  variant={viewMode === "chart" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 text-xs px-2 rounded-l-md rounded-r-none"
+                  onClick={() => setViewMode("chart")}
+                >
+                  Chart
+                </Button>
+                <Button
+                  variant={viewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-7 text-xs px-2 rounded-r-md rounded-l-none"
+                  onClick={() => setViewMode("table")}
+                >
+                  Table
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardHeader>
         <CardContent>
           {dateData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <AreaChart data={dateData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                  tickLine={{ stroke: "hsl(var(--border))" }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={60}
-                />
-                <YAxis
-                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
-                  tickLine={{ stroke: "hsl(var(--border))" }}
-                  tickFormatter={(v) => fmtCost(v)}
-                />
-                <Tooltip content={<DailyTooltip />} />
-                <Area
-                  type="monotone"
-                  dataKey="cost"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  fill="url(#costGradient)"
-                  animationDuration={800}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            viewMode === "chart" ? (
+              <ResponsiveContainer width="100%" height={320}>
+                <AreaChart data={dateData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                  <defs>
+                    <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    tickLine={{ stroke: "hsl(var(--border))" }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
+                  <YAxis
+                    tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                    tickLine={{ stroke: "hsl(var(--border))" }}
+                    tickFormatter={(v) => fmtCost(v)}
+                  />
+                  <Tooltip content={<DailyTooltip />} />
+                  <Area
+                    type="monotone"
+                    dataKey="cost"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#costGradient)"
+                    animationDuration={800}
+                  />
+                  <Brush
+                    dataKey="date"
+                    height={30}
+                    stroke="hsl(var(--border))"
+                    fill="hsl(var(--muted))"
+                    travellerWidth={8}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div>
+                {(() => {
+                  const totalPages = Math.ceil(dateData.length / TABLE_PAGE_SIZE);
+                  const safePage = Math.min(tablePage, totalPages - 1);
+                  const pageData = dateData.slice(safePage * TABLE_PAGE_SIZE, (safePage + 1) * TABLE_PAGE_SIZE);
+                  return (
+                    <>
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/30 border-b">
+                          <tr>
+                            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Date</th>
+                            <th className="text-right py-2 px-3 font-medium text-muted-foreground">Sessions</th>
+                            <th className="text-right py-2 px-3 font-medium text-muted-foreground">Input</th>
+                            <th className="text-right py-2 px-3 font-medium text-muted-foreground">Output</th>
+                            <th className="text-right py-2 px-3 font-medium text-muted-foreground">Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {pageData.map((row) => (
+                            <tr key={row.date} className="hover:bg-muted/30 transition-colors">
+                              <td className="py-2 px-3 font-mono text-xs">{row.date}</td>
+                              <td className="py-2 px-3 text-right font-mono">{row.sessions}</td>
+                              <td className="py-2 px-3 text-right font-mono">{fmtTokens(row.input)}</td>
+                              <td className="py-2 px-3 text-right font-mono">{fmtTokens(row.output)}</td>
+                              <td className="py-2 px-3 text-right font-mono font-bold">{fmtCost(row.cost)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between pt-3 border-t mt-2">
+                          <span className="text-xs text-muted-foreground">
+                            {safePage * TABLE_PAGE_SIZE + 1}-{Math.min((safePage + 1) * TABLE_PAGE_SIZE, dateData.length)} of {dateData.length} days
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={safePage === 0}
+                              onClick={() => setTablePage(safePage - 1)}
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            {Array.from({ length: totalPages }, (_, i) => (
+                              <Button
+                                key={i}
+                                variant={i === safePage ? "default" : "outline"}
+                                size="sm"
+                                className="h-7 w-7 p-0 text-xs"
+                                onClick={() => setTablePage(i)}
+                              >
+                                {i + 1}
+                              </Button>
+                            ))}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              disabled={safePage >= totalPages - 1}
+                              onClick={() => setTablePage(safePage + 1)}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )
           ) : (
             <div className="text-center text-muted-foreground py-6 text-sm">No daily data available</div>
           )}

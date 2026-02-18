@@ -14,11 +14,12 @@ import {
 } from "@/components/ui/select";
 import {
   FolderOpen, Hash, RefreshCw, DollarSign, Clock, LayoutGrid, List,
-  Search, ArrowUpDown, X,
+  Search, ArrowUpDown, X, Star,
 } from "lucide-react";
 import { fmtCost, fmtTokens, timeAgo, formatDT, shortModel } from "@/lib/format-utils";
 import { SessionBlock, StatusLegend, STATUS_CONFIG, highlightText } from "./session-block";
 import type { SessionsData, SessionStatus } from "./types";
+import { useFavorites } from "@/hooks/use-favorites";
 
 const PAGE_SIZE = 24;
 
@@ -34,6 +35,8 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sortBy, setSortBy] = useState<"date" | "cost" | "messages">("date");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
   // Debounce search input
   useEffect(() => {
@@ -44,6 +47,11 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   // Filter and sort sessions
   const sessions = useMemo(() => {
     let filtered = filter ? data.recentSessions.filter(s => s.project === filter) : data.recentSessions;
+
+    // Apply favorites filter
+    if (showFavoritesOnly) {
+      filtered = filtered.filter(s => favorites.includes(s.id));
+    }
 
     // Apply search filter
     if (debouncedSearch.trim()) {
@@ -67,7 +75,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
     }
 
     return sorted;
-  }, [data.recentSessions, filter, debouncedSearch, sortBy]);
+  }, [data.recentSessions, filter, debouncedSearch, sortBy, showFavoritesOnly, favorites]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
@@ -75,7 +83,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   const paginatedSessions = sessions.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
 
   // Reset page when filter/search changes
-  useEffect(() => { setCurrentPage(1); }, [filter, debouncedSearch, sortBy]);
+  useEffect(() => { setCurrentPage(1); }, [filter, debouncedSearch, sortBy, showFavoritesOnly]);
 
   return (
     <div className="space-y-5">
@@ -126,6 +134,15 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
 
       {/* Search and Sort Controls */}
       <div className="flex gap-3 items-center">
+        <Button
+          variant={showFavoritesOnly ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+          className="h-9 px-3"
+        >
+          <Star className={`h-4 w-4 mr-2 ${showFavoritesOnly ? "fill-yellow-400 text-yellow-400" : ""}`} />
+          Favorites {favorites.length > 0 && `(${favorites.length})`}
+        </Button>
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -180,6 +197,8 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
               session={s}
               onClick={() => onSelect(s.project, s.id)}
               searchQuery={debouncedSearch}
+              isFavorite={isFavorite(s.id)}
+              onToggleFavorite={toggleFavorite}
             />
           ))}
         </div>
@@ -192,6 +211,19 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
               <Card key={`${s.project}-${s.id}`} className="cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
                 onClick={() => onSelect(s.project, s.id)}>
                 <CardContent className="py-2.5 flex items-center gap-3">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleFavorite(s.id);
+                    }}
+                    className={`flex-shrink-0 transition-colors ${
+                      isFavorite(s.id)
+                        ? "text-yellow-400 fill-yellow-400"
+                        : "text-muted-foreground hover:text-yellow-400"
+                    }`}
+                  >
+                    <Star className="h-3.5 w-3.5" />
+                  </button>
                   <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${cfg.dot} ${cfg.animation || ""}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">

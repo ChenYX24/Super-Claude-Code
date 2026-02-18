@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, ListTodo, CheckCircle, FolderOpen, Cpu, Clock,
-  ArrowRight, Wrench, FileEdit, Coins, Zap, Activity,
+  ArrowRight, Wrench, FileEdit, Coins, Zap, Activity, Star,
 } from "lucide-react";
 import Link from "next/link";
 import { fmtCost, fmtTokens, timeAgo, shortModel } from "@/lib/format-utils";
-import { AreaChart, Area, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, ResponsiveContainer, Tooltip } from "recharts";
+import { useFavorites } from "@/hooks/use-favorites";
 
 // ---- Types ----
 
@@ -61,6 +62,18 @@ interface TokensData {
 
 // ---- Helpers ----
 
+// Custom Tooltip for sparkline
+function SparklineTooltip({ active, payload }: any) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="bg-card border border-border rounded-md px-2 py-1 shadow-md">
+      <p className="text-xs font-mono">{data.date}</p>
+      <p className="text-xs font-mono font-bold">{fmtCost(data.cost)}</p>
+    </div>
+  );
+}
+
 type SessionStatus = "reading" | "thinking" | "writing" | "waiting" | "completed" | "error" | "idle";
 
 const STATUS_DOTS: Record<SessionStatus, string> = {
@@ -81,6 +94,7 @@ export default function HomePage() {
   const [sessions, setSessions] = useState<SessionsData | null>(null);
   const [tokensData, setTokensData] = useState<TokensData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { isFavorite } = useFavorites();
 
   useEffect(() => {
     Promise.all([
@@ -107,7 +121,7 @@ export default function HomePage() {
         .filter(([k]) => k !== "unknown")
         .sort((a, b) => a[0].localeCompare(b[0]))
         .slice(-7)
-        .map(([date, stats]) => ({ cost: stats.cost }))
+        .map(([date, stats]) => ({ date, cost: stats.cost }))
     : [];
 
   if (loading) {
@@ -347,6 +361,7 @@ export default function HomePage() {
                         <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                       </linearGradient>
                     </defs>
+                    <Tooltip content={<SparklineTooltip />} />
                     <Area
                       type="monotone"
                       dataKey="cost"
@@ -394,7 +409,10 @@ export default function HomePage() {
                     <div className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors">
                       <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${dot}`} />
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{s.firstMessage || s.id.slice(0, 12)}</div>
+                        <div className="text-sm font-medium truncate flex items-center gap-1.5">
+                          {s.firstMessage || s.id.slice(0, 12)}
+                          {isFavorite(s.id) && <Star className="h-3 w-3 text-yellow-400 fill-yellow-400" />}
+                        </div>
                         <div className="text-xs text-muted-foreground truncate">{s.projectName}</div>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">

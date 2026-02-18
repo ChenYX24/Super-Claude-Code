@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Zap, Moon, Clock, Archive } from "lucide-react";
+import { Zap, Moon, Clock, Archive, Star } from "lucide-react";
 import { fmtCost, fmtTokens, timeAgo, formatDT, shortModel } from "@/lib/format-utils";
 import type { SessionInfo, SessionStatus } from "./types";
 
@@ -41,10 +41,12 @@ export function highlightText(text: string, search: string): React.ReactNode {
 }
 
 // Session Grid Block Component
-export function SessionBlock({ session, onClick, searchQuery }: {
+export function SessionBlock({ session, onClick, searchQuery, isFavorite, onToggleFavorite }: {
   session: SessionInfo;
   onClick: () => void;
   searchQuery?: string;
+  isFavorite?: boolean;
+  onToggleFavorite?: (id: string) => void;
 }) {
   const status = (session.status || "idle") as SessionStatus;
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
@@ -61,6 +63,24 @@ export function SessionBlock({ session, onClick, searchQuery }: {
       `}
       title={`${session.firstMessage || session.id.slice(0, 12)}\n${session.projectName}\n${timeAgo(session.lastActive)}`}
     >
+      {/* Star icon (top-left) */}
+      {onToggleFavorite && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(session.id);
+          }}
+          className={`absolute top-2 left-2 z-10 transition-colors ${
+            isFavorite
+              ? "text-yellow-400 fill-yellow-400"
+              : "text-muted-foreground hover:text-yellow-400"
+          }`}
+          title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+        >
+          <Star className="h-4 w-4" />
+        </button>
+      )}
+
       {/* Status indicator dot with animation */}
       <div className={`absolute top-2 right-2 h-2.5 w-2.5 rounded-full ${cfg.dot} ${cfg.animation || ""}`} />
 

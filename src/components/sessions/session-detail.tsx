@@ -8,13 +8,14 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { TerminalView } from "@/components/terminal-view";
 import {
   RefreshCw, ArrowLeft, Wrench, ChevronsUp, ChevronsDown, MapPin,
-  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download, BarChart3,
+  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download, BarChart3, Star,
 } from "lucide-react";
 import { fmtCost, fmtTokens, shortModel } from "@/lib/format-utils";
 import { ConvMessage } from "./conv-message";
 import { SessionAnalytics } from "./session-analytics";
 import type { SessionDetail, FilePreview } from "./types";
 import { useToast } from "@/components/toast";
+import { useFavorites } from "@/hooks/use-favorites";
 
 export function SessionDetailView({ projectPath, sessionId, onBack }: {
   projectPath: string;
@@ -39,6 +40,7 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
   });
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   useEffect(() => {
     setLoading(true);
@@ -170,6 +172,16 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          {/* Star toggle button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={() => toggleFavorite(sessionId)}
+            title={isFavorite(sessionId) ? "Remove from favorites" : "Add to favorites"}
+          >
+            <Star className={`h-4 w-4 ${isFavorite(sessionId) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`} />
+          </Button>
           {/* View mode toggle */}
           <div className="flex items-center gap-0.5 border rounded-md p-0.5 mr-1">
             <Button

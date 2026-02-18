@@ -117,7 +117,7 @@ export function listSkills(): SkillInfo[] {
         name: meta.name || entry,
         description: meta.description || body.split("\n")[0] || "",
         allowedTools: meta.allowed_tools ? meta.allowed_tools.split(",").map(s => s.trim()) : undefined,
-        content: raw,
+        content: body,
         path: skillFile,
       });
     }
@@ -141,7 +141,7 @@ export function listCommands(): CommandInfo[] {
       commands.push({
         name: meta.name || file.replace(".md", ""),
         description: meta.description || body.split("\n")[0] || "",
-        content: raw,
+        content: body,
         path: filePath,
       });
     }
@@ -165,7 +165,7 @@ export function listAgents(): AgentInfo[] {
       agents.push({
         name: meta.name || file.replace(".md", ""),
         description: meta.description || body.split("\n")[0] || "",
-        content: raw,
+        content: body,
         path: filePath,
       });
     }
@@ -191,12 +191,13 @@ export function listRules(): RuleInfo[] {
             scanDir(fullPath, entry);
           } else if (entry.endsWith(".md")) {
             const raw = safeReadFile(fullPath);
-            const lines = raw.split("\n").filter(l => l.trim());
+            const { meta, body } = parseFrontmatter(raw);
+            const lines = body.split("\n").filter(l => l.trim());
             rules.push({
               name: entry.replace(".md", ""),
               group,
               preview: lines.slice(0, 3).join("\n"),
-              content: raw,
+              content: body,
               path: fullPath,
             });
           }
@@ -222,33 +223,42 @@ export function getHooksConfig(): HookEntry[] {
 
       if (settings.hooks && typeof settings.hooks === "object") {
         for (const [hookType, hookDef] of Object.entries(settings.hooks)) {
-          if (Array.isArray(hookDef)) {
-            for (const h of hookDef) {
-              const hook = h as Record<string, unknown>;
+          const entries = Array.isArray(hookDef) ? hookDef : [hookDef];
+          for (const h of entries) {
+            if (!h || typeof h !== "object") continue;
+            const hook = h as Record<string, unknown>;
+
+            // New format: hooks array with {type, command} inside each entry
+            const innerHooks = hook.hooks as Array<Record<string, unknown>> | undefined;
+            if (Array.isArray(innerHooks)) {
+              for (const inner of innerHooks) {
+                if (inner.command && typeof inner.command === "string") {
+                  hooks.push({
+                    type: hookType,
+                    matcher: hook.matcher as string | undefined,
+                    command: inner.command,
+                    timeout: (inner.timeout ?? hook.timeout) as number | undefined,
+                    description: hook.description as string | undefined,
+                  });
+                }
+              }
+            } else if (hook.command && typeof hook.command === "string") {
+              // Legacy format: command directly on the entry
               hooks.push({
                 type: hookType,
                 matcher: hook.matcher as string | undefined,
-                command: hook.command as string || "",
+                command: hook.command,
                 timeout: hook.timeout as number | undefined,
                 description: hook.description as string | undefined,
               });
             }
-          } else if (typeof hookDef === "object" && hookDef !== null) {
-            const hook = hookDef as Record<string, unknown>;
-            hooks.push({
-              type: hookType,
-              matcher: hook.matcher as string | undefined,
-              command: hook.command as string || "",
-              timeout: hook.timeout as number | undefined,
-              description: hook.description as string | undefined,
-            });
           }
         }
       }
     } catch { /* skip */ }
   }
 
-  return hooks;
+  return hooks.filter(h => h.command && h.command.trim());
 }
 
 // ---- Combined ----

@@ -467,6 +467,12 @@ function HooksTab({ hooks }: { hooks: HookEntry[] }) {
 
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
+        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground">
+          Shell commands that run automatically at lifecycle events. Configured in <code className="bg-muted px-1 rounded">~/.claude/settings.json</code>
+        </p>
+      </div>
       {allTypes.map((type) => {
         const items = grouped.get(type);
         if (!items) return null;
@@ -535,7 +541,14 @@ function AgentsTab({ agents }: { agents: AgentInfo[] }) {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+    <div className="space-y-4">
+      <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
+        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground">
+          Custom agent definitions with specialized prompts and tool access. Located in <code className="bg-muted px-1 rounded">~/.claude/agents/</code>
+        </p>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
       {agents.map((agent) => (
         <ExpandableCard
           key={agent.name}
@@ -547,6 +560,7 @@ function AgentsTab({ agents }: { agents: AgentInfo[] }) {
           <MarkdownContent content={agent.content} className="text-xs" />
         </ExpandableCard>
       ))}
+      </div>
     </div>
   );
 }
@@ -578,6 +592,12 @@ function RulesTab({ rules }: { rules: RuleInfo[] }) {
 
   return (
     <div className="space-y-5">
+      <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
+        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground">
+          Instruction files Claude follows automatically. Organized by category in <code className="bg-muted px-1 rounded">~/.claude/rules/</code>
+        </p>
+      </div>
       {Array.from(grouped.entries()).map(([group, items]) => (
         <section key={group}>
           <div className="flex items-center gap-2 mb-2">
@@ -586,16 +606,28 @@ function RulesTab({ rules }: { rules: RuleInfo[] }) {
             <Badge variant="outline" className="text-xs">{items.length}</Badge>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            {items.map((rule) => (
-              <ExpandableCard
-                key={rule.path}
-                title={rule.name}
-                subtitle={rule.preview.split("\n")[0]?.replace(/^#+\s*/, "").slice(0, 80)}
-                icon={<div className="h-7 w-7 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0"><BookOpen className="h-3.5 w-3.5 text-cyan-500" /></div>}
-              >
-                <MarkdownContent content={rule.content} className="text-xs" />
-              </ExpandableCard>
-            ))}
+            {items.map((rule) => {
+              // Skip heading lines for subtitle
+              const previewLines = rule.preview.split("\n").filter(l => l.trim());
+              let subtitle = "";
+              for (const line of previewLines) {
+                if (!line.match(/^#+\s/)) {
+                  subtitle = line.slice(0, 80);
+                  break;
+                }
+              }
+
+              return (
+                <ExpandableCard
+                  key={rule.path}
+                  title={rule.name}
+                  subtitle={subtitle}
+                  icon={<div className="h-7 w-7 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0"><BookOpen className="h-3.5 w-3.5 text-cyan-500" /></div>}
+                >
+                  <MarkdownContent content={rule.content} className="text-xs" />
+                </ExpandableCard>
+              );
+            })}
           </div>
         </section>
       ))}
