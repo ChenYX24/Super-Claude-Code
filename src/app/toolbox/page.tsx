@@ -6,11 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarkdownContent } from "@/components/markdown-content";
+import { useToast } from "@/components/toast";
 import {
   Wrench, Plug, Sparkles, Command, Shield, Bot, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Info, AlertCircle,
   CheckCircle, Clock, Circle, HelpCircle, X, FolderOpen,
-  ExternalLink, Zap, Hash,
+  ExternalLink, Zap, Hash, Plus, Pencil, Trash2,
 } from "lucide-react";
 
 // ---- Types ----
@@ -241,29 +242,429 @@ function SummaryStats({ data }: { data: ToolboxData }) {
   );
 }
 
+// ---- MCP Server Dialog ----
+
+interface MCPDialogProps {
+  open: boolean;
+  onClose: () => void;
+  mode: "add" | "edit";
+  scope: "global" | string;
+  serverName?: string;
+  serverConfig?: MCPServerConfig;
+  onSuccess: () => void;
+}
+
+function MCPServerDialog({
+  open,
+  onClose,
+  mode,
+  scope,
+  serverName = "",
+  serverConfig,
+  onSuccess,
+}: MCPDialogProps) {
+  const { toast } = useToast();
+  const [name, setName] = useState(serverName);
+  const [command, setCommand] = useState(serverConfig?.command || "");
+  const [args, setArgs] = useState(serverConfig?.args?.join(", ") || "");
+  const [envVars, setEnvVars] = useState<Array<{ key: string; value: string }>>(
+    serverConfig?.env
+      ? Object.entries(serverConfig.env).map(([key, value]) => ({ key, value }))
+      : []
+  );
+  const [currentScope, setCurrentScope] = useState<"global" | "project">(
+    scope === "global" ? "global" : "project"
+  );
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName(serverName);
+      setCommand(serverConfig?.command || "");
+      setArgs(serverConfig?.args?.join(", ") || "");
+      setEnvVars(
+        serverConfig?.env
+          ? Object.entries(serverConfig.env).map(([key, value]) => ({ key, value }))
+          : []
+      );
+      setCurrentScope(scope === "global" ? "global" : "project");
+    }
+  }, [open, serverName, serverConfig, scope]);
+
+  if (!open) return null;
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !command.trim()) {
+      toast("Server name and command are required", "error");
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+      toast("Server name must be alphanumeric (hyphens and underscores allowed)", "error");
+      return;
+    }
+
+    setSubmitting(true);
+
+    const config: MCPServerConfig = {
+      command: command.trim(),
+      args: args.trim() ? args.split(",").map((a) => a.trim()).filter(Boolean) : undefined,
+      env: envVars.length > 0
+        ? Object.fromEntries(envVars.filter((e) => e.key && e.value).map((e) => [e.key, e.value]))
+        : undefined,
+    };
+
+    const requestBody = {
+      scope: currentScope,
+      name: name.trim(),
+      config,
+    };
+
+    try {
+      const method = mode === "add" ? "POST" : "PUT";
+      const res = await fetch("/api/toolbox/mcp", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || `Server ${mode === "add" ? "added" : "updated"} successfully`, "success");
+        onSuccess();
+        onClose();
+      } else {
+        toast(data.error || "Operation failed", "error");
+      }
+    } catch (error) {
+      toast("Failed to save server", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const addEnvVar = () => {
+    setEnvVars([...envVars, { key: "", value: "" }]);
+  };
+
+  const removeEnvVar = (index: number) => {
+    setEnvVars(envVars.filter((_, i) => i !== index));
+  };
+
+  const updateEnvVar = (index: number, field: "key" | "value", value: string) => {
+    const updated = [...envVars];
+    updated[index][field] = value;
+    setEnvVars(updated);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-background border rounded-xl shadow-2xl max-w-xl w-full mx-4 max-h-[80vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-background z-10">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Plug className="h-5 w-5 text-primary" />
+            {mode === "add" ? "Add MCP Server" : "Edit MCP Server"}
+          </h2>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Server Name */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Server Name</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+              placeholder="my-server"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={mode === "edit"}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Alphanumeric characters, hyphens, and underscores only
+            </p>
+          </div>
+
+          {/* Command */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Command *</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+              placeholder="npx"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+            />
+          </div>
+
+          {/* Arguments */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Arguments</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+              placeholder="-y, @modelcontextprotocol/server-filesystem"
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Comma-separated list</p>
+          </div>
+
+          {/* Environment Variables */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm font-medium">Environment Variables</label>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={addEnvVar}
+              >
+                <Plus className="h-3 w-3 mr-1" /> Add
+              </Button>
+            </div>
+            {envVars.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No environment variables</p>
+            ) : (
+              <div className="space-y-2">
+                {envVars.map((env, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 px-2 py-1.5 border rounded text-xs font-mono bg-background"
+                      placeholder="KEY"
+                      value={env.key}
+                      onChange={(e) => updateEnvVar(i, "key", e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="flex-1 px-2 py-1.5 border rounded text-xs font-mono bg-background"
+                      placeholder="value"
+                      value={env.value}
+                      onChange={(e) => updateEnvVar(i, "value", e.target.value)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0"
+                      onClick={() => removeEnvVar(i)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Scope (only for add mode) */}
+          {mode === "add" && (
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Scope</label>
+              <div className="flex gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="scope"
+                    value="global"
+                    checked={currentScope === "global"}
+                    onChange={() => setCurrentScope("global")}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm">Global</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="scope"
+                    value="project"
+                    checked={currentScope === "project"}
+                    onChange={() => setCurrentScope("project")}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm">Project</span>
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {currentScope === "global"
+                  ? "Available in all projects"
+                  : "Scoped to current project (not yet implemented)"}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? "Saving..." : mode === "add" ? "Add Server" : "Update Server"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Delete Confirmation Dialog ----
+
+interface DeleteDialogProps {
+  open: boolean;
+  onClose: () => void;
+  serverName: string;
+  scope: string;
+  onConfirm: () => void;
+}
+
+function DeleteConfirmDialog({ open, onClose, serverName, scope, onConfirm }: DeleteDialogProps) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-background border rounded-xl shadow-2xl max-w-md w-full mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-red-500" />
+            Delete MCP Server
+          </h2>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete the MCP server{" "}
+            <span className="font-mono font-semibold text-foreground">{serverName}</span> from{" "}
+            <span className="font-semibold">{scope === "global" ? "global" : scope}</span> scope?
+          </p>
+          <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+            This action cannot be undone.
+          </p>
+        </div>
+        <div className="px-6 py-4 border-t flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="destructive" onClick={onConfirm}>
+            Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---- MCP Tab ----
 
-function MCPTab({ data, health, onCheckHealth }: {
+function MCPTab({ data, health, onCheckHealth, onRefresh }: {
   data: MCPServersData;
   health: Record<string, HealthStatus>;
   onCheckHealth: (name: string, command: string) => void;
+  onRefresh: () => void;
 }) {
+  const { toast } = useToast();
   const globalEntries = Object.entries(data.global);
   const hasGlobal = globalEntries.length > 0;
   const hasProject = data.projects.length > 0;
 
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
+  const [dialogScope, setDialogScope] = useState<"global" | string>("global");
+  const [dialogServerName, setDialogServerName] = useState("");
+  const [dialogServerConfig, setDialogServerConfig] = useState<MCPServerConfig | undefined>();
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteServerName, setDeleteServerName] = useState("");
+  const [deleteScope, setDeleteScope] = useState("");
+
+  const handleAddServer = () => {
+    setDialogMode("add");
+    setDialogScope("global");
+    setDialogServerName("");
+    setDialogServerConfig(undefined);
+    setDialogOpen(true);
+  };
+
+  const handleEditServer = (name: string, config: MCPServerConfig, scope: string) => {
+    setDialogMode("edit");
+    setDialogScope(scope);
+    setDialogServerName(name);
+    setDialogServerConfig(config);
+    setDialogOpen(true);
+  };
+
+  const handleDeleteClick = (name: string, scope: string) => {
+    setDeleteServerName(name);
+    setDeleteScope(scope);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      const res = await fetch("/api/toolbox/mcp", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scope: deleteScope, name: deleteServerName }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || "Server deleted successfully", "success");
+        onRefresh();
+      } else {
+        toast(data.error || "Failed to delete server", "error");
+      }
+    } catch (error) {
+      toast("Failed to delete server", "error");
+    } finally {
+      setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleDialogSuccess = () => {
+    onRefresh();
+  };
+
   if (!hasGlobal && !hasProject) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-10 text-center">
-          <Plug className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-          <p className="text-sm font-medium mb-1">No MCP servers configured</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            MCP servers extend Claude with external tools (filesystem, search, databases, etc.).
-            Configure them in <code className="bg-muted px-1 rounded">~/.claude/settings.json</code> or project <code className="bg-muted px-1 rounded">.mcp.json</code>.
-          </p>
-        </CardContent>
-      </Card>
+      <>
+        <div className="flex justify-end mb-3">
+          <Button size="sm" onClick={handleAddServer} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add Server
+          </Button>
+        </div>
+        <Card className="border-dashed">
+          <CardContent className="py-10 text-center">
+            <Plug className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+            <p className="text-sm font-medium mb-1">No MCP servers configured</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              MCP servers extend Claude with external tools (filesystem, search, databases, etc.).
+              Configure them in <code className="bg-muted px-1 rounded">~/.claude/settings.json</code> or project <code className="bg-muted px-1 rounded">.mcp.json</code>.
+            </p>
+          </CardContent>
+        </Card>
+        <MCPServerDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          mode={dialogMode}
+          scope={dialogScope}
+          serverName={dialogServerName}
+          serverConfig={dialogServerConfig}
+          onSuccess={handleDialogSuccess}
+        />
+      </>
     );
   }
 
@@ -291,14 +692,32 @@ function MCPTab({ data, health, onCheckHealth }: {
                 </div>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={() => onCheckHealth(name, config.command)}
-            >
-              <RefreshCw className="h-3 w-3 mr-1" /> Check
-            </Button>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => onCheckHealth(name, config.command)}
+              >
+                <RefreshCw className="h-3 w-3 mr-1" /> Check
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => handleEditServer(name, config, scope === "Global" ? "global" : scope)}
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                onClick={() => handleDeleteClick(name, scope === "Global" ? "global" : scope)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2 pt-0">
@@ -323,30 +742,56 @@ function MCPTab({ data, health, onCheckHealth }: {
   };
 
   return (
-    <div className="space-y-6">
-      {hasGlobal && (
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <Badge variant="default" className="text-xs">Global</Badge>
-            <span className="text-xs text-muted-foreground">{globalEntries.length} server{globalEntries.length !== 1 ? "s" : ""}</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {globalEntries.map(([name, config]) => renderServer(name, config, "Global"))}
-          </div>
-        </section>
-      )}
-      {hasProject && data.projects.map(({ project, servers }) => (
-        <section key={project}>
-          <div className="flex items-center gap-2 mb-3">
-            <Badge variant="secondary" className="text-xs font-mono">{project}</Badge>
-            <span className="text-xs text-muted-foreground">{Object.keys(servers).length} server{Object.keys(servers).length !== 1 ? "s" : ""}</span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(servers).map(([name, config]) => renderServer(name, config, project))}
-          </div>
-        </section>
-      ))}
-    </div>
+    <>
+      <div className="flex justify-end mb-3">
+        <Button size="sm" onClick={handleAddServer} className="gap-1.5">
+          <Plus className="h-4 w-4" /> Add Server
+        </Button>
+      </div>
+
+      <div className="space-y-6">
+        {hasGlobal && (
+          <section>
+            <div className="flex items-center gap-2 mb-3">
+              <Badge variant="default" className="text-xs">Global</Badge>
+              <span className="text-xs text-muted-foreground">{globalEntries.length} server{globalEntries.length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {globalEntries.map(([name, config]) => renderServer(name, config, "Global"))}
+            </div>
+          </section>
+        )}
+        {hasProject && data.projects.map(({ project, servers }) => (
+          <section key={project}>
+            <div className="flex items-center gap-2 mb-3">
+              <Badge variant="secondary" className="text-xs font-mono">{project}</Badge>
+              <span className="text-xs text-muted-foreground">{Object.keys(servers).length} server{Object.keys(servers).length !== 1 ? "s" : ""}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(servers).map(([name, config]) => renderServer(name, config, project))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {/* Dialogs */}
+      <MCPServerDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        mode={dialogMode}
+        scope={dialogScope}
+        serverName={dialogServerName}
+        serverConfig={dialogServerConfig}
+        onSuccess={handleDialogSuccess}
+      />
+      <DeleteConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        serverName={deleteServerName}
+        scope={deleteScope}
+        onConfirm={handleDeleteConfirm}
+      />
+    </>
   );
 }
 
@@ -643,12 +1088,17 @@ export default function ToolboxPage() {
   const [health, setHealth] = useState<Record<string, HealthStatus>>({});
   const [showHelp, setShowHelp] = useState(false);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
+    setLoading(true);
     fetch("/api/toolbox")
       .then((r) => r.json())
       .then((d: ToolboxData) => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const checkHealth = useCallback((name: string, command: string) => {
     setHealth((prev) => ({ ...prev, [name]: "checking" }));
@@ -730,7 +1180,7 @@ export default function ToolboxPage() {
         </TabsList>
 
         <TabsContent value="mcp">
-          <MCPTab data={data.mcp} health={health} onCheckHealth={checkHealth} />
+          <MCPTab data={data.mcp} health={health} onCheckHealth={checkHealth} onRefresh={fetchData} />
         </TabsContent>
         <TabsContent value="skills">
           <SkillsTab skills={data.skills} commands={data.commands} />

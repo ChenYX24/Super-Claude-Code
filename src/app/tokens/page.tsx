@@ -23,7 +23,7 @@ interface TokensData {
   totalCacheRead: number;
   totalCost: number;
   byModel: Record<string, { input: number; output: number; cost: number; sessions: number }>;
-  byDate: Record<string, { input: number; output: number; cost: number; sessions: number }>;
+  byDate: Record<string, { input: number; output: number; cost: number; sessions: number; byModel?: Record<string, { cost: number }> }>;
   sessionCount: number;
 }
 
@@ -171,6 +171,29 @@ export default function TokensPage() {
 
   if (!data) return <div className="text-center py-16"><DollarSign className="h-12 w-12 mx-auto text-muted-foreground mb-4" /><h2 className="text-lg">No data</h2></div>;
 
+  // Calculate today and week stats
+  const today = new Date().toISOString().split("T")[0];
+  const todayData = data.byDate[today] || { cost: 0, sessions: 0 };
+
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  const yesterdayData = data.byDate[yesterday] || { cost: 0 };
+  const todayChange = yesterdayData.cost > 0 ? ((todayData.cost - yesterdayData.cost) / yesterdayData.cost) * 100 : 0;
+
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+  const thisWeekCost = Object.entries(data.byDate)
+    .filter(([date]) => date >= weekAgo && date <= today)
+    .reduce((sum, [, stats]) => sum + stats.cost, 0);
+
+  const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().split("T")[0];
+  const lastWeekCost = Object.entries(data.byDate)
+    .filter(([date]) => date >= twoWeeksAgo && date < weekAgo)
+    .reduce((sum, [, stats]) => sum + stats.cost, 0);
+  const weekChange = lastWeekCost > 0 ? ((thisWeekCost - lastWeekCost) / lastWeekCost) * 100 : 0;
+
+  // Calculate cache savings (cache reads cost ~90% less)
+  const CACHE_DISCOUNT = 0.9;
+  const cacheSavings = (data.totalCacheRead * 15 / 1_000_000) * CACHE_DISCOUNT;
+
   // Prepare model data for PieChart
   const modelData = Object.entries(data.byModel)
     .filter(([, v]) => v.cost > 0)
@@ -233,35 +256,51 @@ export default function TokensPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" />Total Cost</CardTitle></CardHeader>
           <CardContent><div className="text-3xl font-bold text-primary">{fmtCost(data.totalCost)}</div></CardContent>
         </Card>
         <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" />Today</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{fmtCost(todayData.cost)}</div>
+            <div className="text-xs flex items-center gap-1 text-muted-foreground">
+              {todayChange > 0 ? <ArrowUpRight className="h-3 w-3 text-red-500" /> : <ArrowDownRight className="h-3 w-3 text-green-500" />}
+              {Math.abs(todayChange).toFixed(0)}% vs yesterday
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><TrendingUp className="h-4 w-4" />This Week</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{fmtCost(thisWeekCost)}</div>
+            <div className="text-xs flex items-center gap-1 text-muted-foreground">
+              {weekChange > 0 ? <ArrowUpRight className="h-3 w-3 text-red-500" /> : <ArrowDownRight className="h-3 w-3 text-green-500" />}
+              {Math.abs(weekChange).toFixed(0)}% vs last week
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><Database className="h-4 w-4" />Cache Savings</CardTitle></CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{fmtCost(cacheSavings)}</div>
+            <div className="text-xs text-muted-foreground">{fmtTokens(data.totalCacheRead)} cached</div>
+          </CardContent>
+        </Card>
+        <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><ArrowUpRight className="h-4 w-4" />Input</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{fmtTokens(data.totalInput)}</div>
-            <div className="text-xs text-muted-foreground">{fmtCost(data.totalInput * 15 / 1e6)} (Opus rate)</div>
+            <div className="text-xl font-bold">{fmtTokens(data.totalInput)}</div>
+            <div className="text-xs text-muted-foreground">{fmtCost(data.totalInput * 15 / 1e6)} (Opus)</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><ArrowDownRight className="h-4 w-4" />Output</CardTitle></CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{fmtTokens(data.totalOutput)}</div>
-            <div className="text-xs text-muted-foreground">{fmtCost(data.totalOutput * 75 / 1e6)} (Opus rate)</div>
+            <div className="text-xl font-bold">{fmtTokens(data.totalOutput)}</div>
+            <div className="text-xs text-muted-foreground">{fmtCost(data.totalOutput * 75 / 1e6)} (Opus)</div>
           </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><Database className="h-4 w-4" />Cache Read</CardTitle></CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{fmtTokens(data.totalCacheRead)}</div>
-            <div className="text-xs text-muted-foreground">Saved from cache</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><TrendingUp className="h-4 w-4" />Sessions</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-bold">{data.sessionCount}</div></CardContent>
         </Card>
       </div>
 
@@ -319,9 +358,9 @@ export default function TokensPage() {
             <div className="mt-4 p-3 bg-muted/30 rounded text-xs text-muted-foreground">
               <p className="font-medium mb-1">Cost estimation notes:</p>
               <ul className="space-y-0.5 list-disc list-inside">
-                <li>Only the first 30 JSONL lines per session are scanned for speed</li>
-                <li>Actual cost may be higher for long sessions</li>
-                <li>Cache reads reduce real cost but aren&apos;t subtracted here</li>
+                <li>Model detection now scans all lines for accuracy</li>
+                <li>Cache reads cost ~90% less than regular input tokens</li>
+                <li>Actual billing may vary based on API usage</li>
               </ul>
             </div>
           </CardContent>

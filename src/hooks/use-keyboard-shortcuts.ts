@@ -11,10 +11,10 @@ export function useKeyboardShortcuts() {
       const target = e.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
-      // Number keys 1-7 for page navigation
-      const pages = ["/", "/team", "/sessions", "/tokens", "/toolbox", "/editor", "/settings"];
+      // Number keys 1-8 for page navigation
+      const pages = ["/", "/team", "/sessions", "/chat", "/tokens", "/toolbox", "/editor", "/settings"];
       const num = parseInt(e.key);
-      if (num >= 1 && num <= 7 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (num >= 1 && num <= 8 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         router.push(pages[num - 1]);
         return;

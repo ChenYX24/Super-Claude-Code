@@ -223,11 +223,11 @@ export function listSessions(projectPath: string): SessionInfo[] {
         const lines = content.split("\n").filter((l) => l.trim());
         messageCount = lines.length;
 
-        // Scan all lines for usage totals + first few for metadata
+        // Scan all lines for usage totals + metadata
         for (let li = 0; li < lines.length; li++) {
           try {
             const obj = JSON.parse(sanitize(lines[li]));
-            // Metadata: only from first 30 lines
+            // First message: only from first 30 lines for performance
             if (li < 30) {
               if (obj.type === "user" && !firstMessage && obj.message?.content) {
                 const c = obj.message.content;
@@ -235,9 +235,10 @@ export function listSessions(projectPath: string): SessionInfo[] {
                   typeof c === "string" ? c.slice(0, 120) :
                   Array.isArray(c) ? (c.find((b: { type: string; text?: string }) => b.type === "text")?.text || "").slice(0, 120) : "";
               }
-              if (obj.type === "assistant" && obj.message?.model && !model) {
-                model = obj.message.model;
-              }
+            }
+            // Model detection: scan ALL lines
+            if (obj.type === "assistant" && obj.message?.model && !model) {
+              model = obj.message.model;
             }
             // Usage: accumulate from ALL lines
             const usage = obj.message?.usage;
@@ -400,7 +401,7 @@ export interface TokenSummary {
   totalCacheRead: number;
   totalCost: number;
   byModel: Record<string, { input: number; output: number; cost: number; sessions: number }>;
-  byDate: Record<string, { input: number; output: number; cost: number; sessions: number }>;
+  byDate: Record<string, { input: number; output: number; cost: number; sessions: number; byModel?: Record<string, { cost: number }> }>;
   sessionCount: number;
 }
 
@@ -424,11 +425,16 @@ export function getTokenSummary(): TokenSummary {
     byModel[m].sessions++;
 
     const date = s.startTime ? new Date(s.startTime).toISOString().split("T")[0] : "unknown";
-    if (!byDate[date]) byDate[date] = { input: 0, output: 0, cost: 0, sessions: 0 };
+    if (!byDate[date]) byDate[date] = { input: 0, output: 0, cost: 0, sessions: 0, byModel: {} };
     byDate[date].input += s.totalInputTokens;
     byDate[date].output += s.totalOutputTokens;
     byDate[date].cost += s.estimatedCost;
     byDate[date].sessions++;
+
+    // Add per-model breakdown for each date
+    if (!byDate[date].byModel) byDate[date].byModel = {};
+    if (!byDate[date].byModel![m]) byDate[date].byModel![m] = { cost: 0 };
+    byDate[date].byModel![m].cost += s.estimatedCost;
   }
 
   return { totalInput, totalOutput, totalCacheRead, totalCost, byModel, byDate, sessionCount: sessions.length };

@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Keyboard,
+  MessageCircle,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/team", label: "Team Board", icon: Users },
   { href: "/sessions", label: "Sessions", icon: Clock },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/tokens", label: "Tokens", icon: Coins },
   { href: "/toolbox", label: "Toolbox", icon: Wrench },
   { href: "/editor", label: "CLAUDE.md", icon: FileEdit },

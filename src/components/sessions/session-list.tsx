@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import {
   FolderOpen, Hash, RefreshCw, DollarSign, Clock, LayoutGrid, List,
-  Search, ArrowUpDown, X, Star,
+  Search, ArrowUpDown, X, Star, Calendar, Cpu,
 } from "lucide-react";
 import { fmtCost, fmtTokens, timeAgo, formatDT, shortModel } from "@/lib/format-utils";
 import { SessionBlock, StatusLegend, STATUS_CONFIG, highlightText } from "./session-block";
@@ -22,6 +22,10 @@ import type { SessionsData, SessionStatus } from "./types";
 import { useFavorites } from "@/hooks/use-favorites";
 
 const PAGE_SIZE = 24;
+
+type DateRange = "all" | "today" | "week" | "month";
+type ModelFilter = "all" | "opus" | "sonnet" | "haiku";
+type SortBy = "date" | "cost" | "messages" | "tokens";
 
 export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   data: SessionsData;
@@ -33,9 +37,11 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"date" | "cost" | "messages">("date");
+  const [sortBy, setSortBy] = useState<SortBy>("date");
   const [currentPage, setCurrentPage] = useState(1);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const [dateRange, setDateRange] = useState<DateRange>("all");
+  const [modelFilter, setModelFilter] = useState<ModelFilter>("all");
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
 
   // Debounce search input
@@ -51,6 +57,23 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
     // Apply favorites filter
     if (showFavoritesOnly) {
       filtered = filtered.filter(s => favorites.includes(s.id));
+    }
+
+    // Apply date range filter
+    if (dateRange !== "all") {
+      const now = Date.now();
+      const cutoff = dateRange === "today" ? now - 24 * 60 * 60 * 1000 :
+                     dateRange === "week" ? now - 7 * 24 * 60 * 60 * 1000 :
+                     now - 30 * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter(s => s.lastActive >= cutoff);
+    }
+
+    // Apply model filter
+    if (modelFilter !== "all") {
+      filtered = filtered.filter(s => {
+        const model = s.model?.toLowerCase() || "";
+        return model.includes(modelFilter);
+      });
     }
 
     // Apply search filter
@@ -72,10 +95,12 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
       sorted.sort((a, b) => b.estimatedCost - a.estimatedCost);
     } else if (sortBy === "messages") {
       sorted.sort((a, b) => b.messageCount - a.messageCount);
+    } else if (sortBy === "tokens") {
+      sorted.sort((a, b) => (b.totalInputTokens + b.totalOutputTokens) - (a.totalInputTokens + a.totalOutputTokens));
     }
 
     return sorted;
-  }, [data.recentSessions, filter, debouncedSearch, sortBy, showFavoritesOnly, favorites]);
+  }, [data.recentSessions, filter, debouncedSearch, sortBy, showFavoritesOnly, favorites, dateRange, modelFilter]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
@@ -83,7 +108,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   const paginatedSessions = sessions.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
 
   // Reset page when filter/search changes
-  useEffect(() => { setCurrentPage(1); }, [filter, debouncedSearch, sortBy, showFavoritesOnly]);
+  useEffect(() => { setCurrentPage(1); }, [filter, debouncedSearch, sortBy, showFavoritesOnly, dateRange, modelFilter]);
 
   return (
     <div className="space-y-5">
@@ -133,7 +158,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
       </div>
 
       {/* Search and Sort Controls */}
-      <div className="flex gap-3 items-center">
+      <div className="flex gap-3 items-center flex-wrap">
         <Button
           variant={showFavoritesOnly ? "default" : "outline"}
           size="sm"
@@ -143,7 +168,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
           <Star className={`h-4 w-4 mr-2 ${showFavoritesOnly ? "fill-yellow-400 text-yellow-400" : ""}`} />
           Favorites {favorites.length > 0 && `(${favorites.length})`}
         </Button>
-        <div className="relative flex-1 max-w-md">
+        <div className="relative flex-1 max-w-md min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
@@ -163,7 +188,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
             </Button>
           )}
         </div>
-        <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+        <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
           <SelectTrigger className="w-[180px]">
             <ArrowUpDown className="h-4 w-4 mr-2" />
             <SelectValue />
@@ -172,8 +197,63 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
             <SelectItem value="date">Sort by Date</SelectItem>
             <SelectItem value="cost">Sort by Cost</SelectItem>
             <SelectItem value="messages">Sort by Messages</SelectItem>
+            <SelectItem value="tokens">Sort by Tokens</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Date Range and Model Filters */}
+      <div className="flex gap-3 items-center flex-wrap">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-1 border rounded-lg p-0.5">
+            {(["all", "today", "week", "month"] as DateRange[]).map((range) => (
+              <Button
+                key={range}
+                variant={dateRange === range ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setDateRange(range)}
+              >
+                {range === "all" ? "All Time" :
+                 range === "today" ? "Today" :
+                 range === "week" ? "This Week" :
+                 "This Month"}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Cpu className="h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-1 border rounded-lg p-0.5">
+            {(["all", "opus", "sonnet", "haiku"] as ModelFilter[]).map((model) => (
+              <Button
+                key={model}
+                variant={modelFilter === model ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-3 text-xs"
+                onClick={() => setModelFilter(model)}
+              >
+                {model === "all" ? "All Models" :
+                 model.charAt(0).toUpperCase() + model.slice(1)}
+              </Button>
+            ))}
+          </div>
+        </div>
+        {(dateRange !== "all" || modelFilter !== "all") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            onClick={() => {
+              setDateRange("all");
+              setModelFilter("all");
+            }}
+          >
+            <X className="h-3 w-3 mr-1" />
+            Clear Filters
+          </Button>
+        )}
       </div>
 
       <div className="flex items-center justify-between gap-4 flex-wrap">
