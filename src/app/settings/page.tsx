@@ -15,8 +15,11 @@ import {
   Eye,
   EyeOff,
   Save,
+  Bell,
+  DollarSign,
 } from "lucide-react";
 import type { ClaudeSettings, EnvironmentInfo } from "@/lib/settings-reader";
+import { useNotifications } from "@/hooks/use-notifications";
 
 interface SettingsResponse {
   global: ClaudeSettings;
@@ -29,6 +32,7 @@ export default function SettingsPage() {
   const [data, setData] = useState<SettingsResponse | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const { toast } = useToast();
+  const { alertConfig, updateAlertConfig } = useNotifications();
 
   // Editable fields
   const [defaultModel, setDefaultModel] = useState("");
@@ -36,12 +40,18 @@ export default function SettingsPage() {
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [alwaysThinkingEnabled, setAlwaysThinkingEnabled] = useState(true);
 
+  // Cost alert fields
+  const [dailyBudget, setDailyBudget] = useState(0);
+  const [weeklyBudget, setWeeklyBudget] = useState(0);
+
   // Track original values to detect changes
   const [originalValues, setOriginalValues] = useState({
     defaultModel: "",
     theme: "",
     autoUpdate: true,
     alwaysThinkingEnabled: true,
+    dailyBudget: 0,
+    weeklyBudget: 0,
   });
 
   // Track if there are unsaved changes
@@ -49,7 +59,9 @@ export default function SettingsPage() {
     defaultModel !== originalValues.defaultModel ||
     theme !== originalValues.theme ||
     autoUpdate !== originalValues.autoUpdate ||
-    alwaysThinkingEnabled !== originalValues.alwaysThinkingEnabled;
+    alwaysThinkingEnabled !== originalValues.alwaysThinkingEnabled ||
+    dailyBudget !== originalValues.dailyBudget ||
+    weeklyBudget !== originalValues.weeklyBudget;
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -77,9 +89,17 @@ export default function SettingsPage() {
           theme: themeValue,
           autoUpdate: autoUpdateValue,
           alwaysThinkingEnabled: thinkingValue,
+          dailyBudget: alertConfig.dailyBudget,
+          weeklyBudget: alertConfig.weeklyBudget,
         });
       });
   };
+
+  // Load alert config on mount
+  useEffect(() => {
+    setDailyBudget(alertConfig.dailyBudget);
+    setWeeklyBudget(alertConfig.weeklyBudget);
+  }, [alertConfig]);
 
   useEffect(() => {
     loadSettings();
@@ -88,6 +108,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
+      // Save Claude settings
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -102,6 +123,12 @@ export default function SettingsPage() {
       const result = await response.json();
 
       if (result.success) {
+        // Save alert config to localStorage
+        updateAlertConfig({
+          dailyBudget,
+          weeklyBudget,
+        });
+
         toast("Settings saved successfully", "success");
         // Reload to get updated values
         loadSettings();
@@ -256,6 +283,81 @@ export default function SettingsPage() {
               </Badge>
             </label>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Cost Alerts */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Bell className="h-5 w-5" />
+            Cost Alerts
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground mb-4">
+            Set budget limits to receive notifications when costs exceed thresholds. Set to 0 to disable.
+          </div>
+
+          {/* Daily Budget */}
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-muted-foreground min-w-[180px]">
+              Daily Budget
+            </div>
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={dailyBudget}
+                onChange={(e) => setDailyBudget(Number(e.target.value))}
+                className="bg-muted border border-border rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="0.00"
+              />
+              <span className="text-xs text-muted-foreground">
+                {dailyBudget === 0 ? "(disabled)" : "per day"}
+              </span>
+            </div>
+          </div>
+
+          {/* Weekly Budget */}
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-muted-foreground min-w-[180px]">
+              Weekly Budget
+            </div>
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={weeklyBudget}
+                onChange={(e) => setWeeklyBudget(Number(e.target.value))}
+                className="bg-muted border border-border rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="0.00"
+              />
+              <span className="text-xs text-muted-foreground">
+                {weeklyBudget === 0 ? "(disabled)" : "per week"}
+              </span>
+            </div>
+          </div>
+
+          {/* Alert Status */}
+          {(dailyBudget > 0 || weeklyBudget > 0) && (
+            <div className="mt-4 p-3 bg-muted/50 rounded-md">
+              <div className="flex items-start gap-2">
+                <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
+                <div className="text-sm">
+                  <p className="font-medium">Alerts enabled</p>
+                  <p className="text-muted-foreground text-xs mt-1">
+                    You'll receive notifications when costs exceed your budget limits.
+                    Checks run every 60 seconds.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

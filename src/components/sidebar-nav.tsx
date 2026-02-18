@@ -17,6 +17,7 @@ import {
   MessageCircle,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 import { Button } from "@/components/ui/button";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { ShortcutsHelp } from "@/components/shortcuts-help";
@@ -83,9 +84,12 @@ export function SidebarNav() {
           ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        <div className="font-bold text-lg mb-6 flex items-center gap-2">
-          <span className="text-xl">⚡</span>
-          Super Claude Code
+        <div className="font-bold text-lg mb-6 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⚡</span>
+            <span>Super Claude Code</span>
+          </div>
+          <NotificationBell />
         </div>
         <nav className="space-y-1 flex-1">
           {navItems.map((item) => {

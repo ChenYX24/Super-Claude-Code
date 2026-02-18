@@ -7,11 +7,22 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MarkdownContent } from "@/components/markdown-content";
 import { useToast } from "@/components/toast";
+import { AgentDialog } from "@/components/toolbox/agent-dialog";
+import { RuleDialog } from "@/components/toolbox/rule-dialog";
+import { MCP_REGISTRY, MCP_CATEGORIES, type MCPRegistryEntry } from "@/lib/mcp-registry";
+import {
+  SKILL_TEMPLATES,
+  AGENT_TEMPLATES,
+  RULE_TEMPLATES,
+  TOOL_CATEGORIES,
+  type ToolTemplate,
+} from "@/lib/tools-registry";
 import {
   Wrench, Plug, Sparkles, Command, Shield, Bot, BookOpen,
   RefreshCw, ChevronDown, ChevronRight, Info, AlertCircle,
   CheckCircle, Clock, Circle, HelpCircle, X, FolderOpen,
-  ExternalLink, Zap, Hash, Plus, Pencil, Trash2,
+  ExternalLink, Zap, Hash, Plus, Pencil, Trash2, ShoppingBag,
+  Search,
 } from "lucide-react";
 
 // ---- Types ----
@@ -64,6 +75,7 @@ interface HookEntry {
   command: string;
   timeout?: number;
   description?: string;
+  index?: number;
 }
 
 interface ToolboxData {
@@ -514,6 +526,228 @@ function MCPServerDialog({
   );
 }
 
+// ---- Marketplace Install Dialog ----
+
+interface InstallDialogProps {
+  open: boolean;
+  onClose: () => void;
+  entry: MCPRegistryEntry | null;
+  onSuccess: () => void;
+}
+
+function MarketplaceInstallDialog({ open, onClose, entry, onSuccess }: InstallDialogProps) {
+  const { toast } = useToast();
+  const [command, setCommand] = useState("");
+  const [args, setArgs] = useState("");
+  const [envVars, setEnvVars] = useState<Array<{ key: string; value: string; description?: string }>>([]);
+  const [scope, setScope] = useState<"global" | "project">("global");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open && entry) {
+      setCommand(entry.command);
+      setArgs(entry.args.join(", "));
+      setEnvVars(
+        entry.env
+          ? Object.entries(entry.env).map(([key, value]) => ({
+              key,
+              value,
+              description: entry.envDescriptions?.[key],
+            }))
+          : []
+      );
+      setScope("global");
+    }
+  }, [open, entry]);
+
+  if (!open || !entry) return null;
+
+  const handleSubmit = async () => {
+    if (!command.trim()) {
+      toast("Command is required", "error");
+      return;
+    }
+
+    // Validate env vars if required
+    if (entry.env && envVars.some((e) => !e.value.trim())) {
+      toast("All environment variables must be filled", "error");
+      return;
+    }
+
+    setSubmitting(true);
+
+    const config: MCPServerConfig = {
+      command: command.trim(),
+      args: args.trim() ? args.split(",").map((a) => a.trim()).filter(Boolean) : undefined,
+      env: envVars.length > 0
+        ? Object.fromEntries(envVars.filter((e) => e.key && e.value).map((e) => [e.key, e.value]))
+        : undefined,
+    };
+
+    const requestBody = {
+      scope,
+      name: entry.name,
+      config,
+    };
+
+    try {
+      const res = await fetch("/api/toolbox/mcp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || "Server installed successfully", "success");
+        onSuccess();
+        onClose();
+      } else {
+        toast(data.error || "Installation failed", "error");
+      }
+    } catch (error) {
+      toast("Failed to install server", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const updateEnvVar = (index: number, field: "key" | "value", value: string) => {
+    const updated = [...envVars];
+    updated[index][field] = value;
+    setEnvVars(updated);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-background border rounded-xl shadow-2xl max-w-xl w-full mx-4 max-h-[80vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-background z-10">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <ShoppingBag className="h-5 w-5 text-primary" />
+            Install MCP Server
+          </h2>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Server Name */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Server Name</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-muted"
+              value={entry.name}
+              disabled
+            />
+          </div>
+
+          {/* Description */}
+          {entry.description && (
+            <div className="text-xs text-muted-foreground bg-muted/30 rounded-lg px-3 py-2">
+              {entry.description}
+            </div>
+          )}
+
+          {/* Command Preview */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Command Preview</label>
+            <code className="text-xs bg-muted px-3 py-2 rounded block break-all font-mono">
+              {command} {args}
+            </code>
+          </div>
+
+          {/* Environment Variables */}
+          {envVars.length > 0 && (
+            <div>
+              <label className="text-sm font-medium block mb-1.5">Environment Variables *</label>
+              <div className="space-y-2">
+                {envVars.map((env, i) => (
+                  <div key={i}>
+                    <label className="text-xs text-muted-foreground block mb-1">{env.key}</label>
+                    <input
+                      type="text"
+                      className="w-full px-2 py-1.5 border rounded text-xs font-mono bg-background"
+                      placeholder={env.description || "value"}
+                      value={env.value}
+                      onChange={(e) => updateEnvVar(i, "value", e.target.value)}
+                    />
+                    {env.description && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{env.description}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Arguments (Editable) */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Arguments</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+              placeholder="Comma-separated list"
+              value={args}
+              onChange={(e) => setArgs(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">You can customize the arguments if needed</p>
+          </div>
+
+          {/* Scope */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Scope</label>
+            <div className="flex gap-3">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="install-scope"
+                  value="global"
+                  checked={scope === "global"}
+                  onChange={() => setScope("global")}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">Global</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="install-scope"
+                  value="project"
+                  checked={scope === "project"}
+                  onChange={() => setScope("project")}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm">Project</span>
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {scope === "global"
+                ? "Available in all projects"
+                : "Scoped to current project (not yet implemented)"}
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? "Installing..." : "Install"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---- Delete Confirmation Dialog ----
 
 interface DeleteDialogProps {
@@ -588,6 +822,12 @@ function MCPTab({ data, health, onCheckHealth, onRefresh }: {
   const [deleteServerName, setDeleteServerName] = useState("");
   const [deleteScope, setDeleteScope] = useState("");
 
+  const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<MCPRegistryEntry | null>(null);
+
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState("");
+
   const handleAddServer = () => {
     setDialogMode("add");
     setDialogScope("global");
@@ -636,6 +876,30 @@ function MCPTab({ data, health, onCheckHealth, onRefresh }: {
   const handleDialogSuccess = () => {
     onRefresh();
   };
+
+  const handleInstallClick = (entry: MCPRegistryEntry) => {
+    setSelectedEntry(entry);
+    setInstallDialogOpen(true);
+  };
+
+  const handleInstallSuccess = () => {
+    onRefresh();
+  };
+
+  // Get installed server names for checking
+  const installedNames = new Set([
+    ...Object.keys(data.global),
+    ...data.projects.flatMap(p => Object.keys(p.servers)),
+  ]);
+
+  // Filter marketplace entries
+  const filteredEntries = MCP_REGISTRY.filter((entry) => {
+    const matchesCategory = categoryFilter === "All" || entry.category === categoryFilter;
+    const matchesSearch = !searchQuery ||
+      entry.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      entry.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   if (!hasGlobal && !hasProject) {
     return (
@@ -772,6 +1036,117 @@ function MCPTab({ data, health, onCheckHealth, onRefresh }: {
             </div>
           </section>
         ))}
+
+        {/* Separator */}
+        <div className="border-t my-6" />
+
+        {/* Marketplace Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <ShoppingBag className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold">MCP Marketplace</h2>
+            <Badge variant="outline" className="text-xs">{MCP_REGISTRY.length} available</Badge>
+          </div>
+
+          {/* Category Filter + Search */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <div className="flex gap-2 flex-wrap">
+              {MCP_CATEGORIES.map((cat) => (
+                <Button
+                  key={cat}
+                  variant={categoryFilter === cat ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setCategoryFilter(cat)}
+                >
+                  {cat}
+                </Button>
+              ))}
+            </div>
+            <div className="relative flex-1 sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search servers..."
+                className="w-full h-7 pl-8 pr-3 text-xs border rounded-md bg-background"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Marketplace Cards */}
+          {filteredEntries.length === 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-8 text-center">
+                <p className="text-sm text-muted-foreground">No servers found matching your filters</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredEntries.map((entry) => {
+                const isInstalled = installedNames.has(entry.name);
+
+                return (
+                  <Card key={entry.name} className="group hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="h-8 w-8 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center flex-shrink-0">
+                            <ShoppingBag className="h-4 w-4 text-primary" />
+                          </div>
+                          <div className="min-w-0">
+                            <CardTitle className="text-sm font-mono truncate">{entry.name}</CardTitle>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                                {entry.category}
+                              </Badge>
+                              {entry.official && (
+                                <Badge variant="default" className="text-[10px] h-4 px-1">
+                                  Official
+                                </Badge>
+                              )}
+                              {isInstalled && (
+                                <Badge variant="outline" className="text-[10px] h-4 px-1 text-green-600 border-green-600">
+                                  Installed
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2 pt-0">
+                      <p className="text-xs text-muted-foreground line-clamp-2">{entry.description}</p>
+                      <Button
+                        size="sm"
+                        variant={isInstalled ? "outline" : "default"}
+                        className="w-full h-7 text-xs"
+                        disabled={isInstalled}
+                        onClick={() => handleInstallClick(entry)}
+                      >
+                        {isInstalled ? "Installed" : "Install"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* External Links */}
+          <div className="mt-4 flex gap-3 text-xs text-muted-foreground">
+            <a href="https://github.com/modelcontextprotocol/servers" target="_blank" rel="noopener noreferrer" className="hover:text-primary flex items-center gap-1">
+              <ExternalLink className="h-3 w-3" />Official Servers
+            </a>
+            <a href="https://glama.ai/mcp/servers" target="_blank" rel="noopener noreferrer" className="hover:text-primary flex items-center gap-1">
+              <ExternalLink className="h-3 w-3" />Glama Directory
+            </a>
+            <a href="https://smithery.ai/" target="_blank" rel="noopener noreferrer" className="hover:text-primary flex items-center gap-1">
+              <ExternalLink className="h-3 w-3" />Smithery
+            </a>
+          </div>
+        </section>
       </div>
 
       {/* Dialogs */}
@@ -783,6 +1158,12 @@ function MCPTab({ data, health, onCheckHealth, onRefresh }: {
         serverName={dialogServerName}
         serverConfig={dialogServerConfig}
         onSuccess={handleDialogSuccess}
+      />
+      <MarketplaceInstallDialog
+        open={installDialogOpen}
+        onClose={() => setInstallDialogOpen(false)}
+        entry={selectedEntry}
+        onSuccess={handleInstallSuccess}
       />
       <DeleteConfirmDialog
         open={deleteDialogOpen}
@@ -797,28 +1178,65 @@ function MCPTab({ data, health, onCheckHealth, onRefresh }: {
 
 // ---- Skills Tab ----
 
-function SkillsTab({ skills, commands }: { skills: SkillInfo[]; commands: CommandInfo[] }) {
-  if (skills.length === 0 && commands.length === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardContent className="py-10 text-center">
-          <Sparkles className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-          <p className="text-sm font-medium mb-1">No skills or commands found</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Skills provide reusable prompt templates. Commands define slash commands like <code className="bg-muted px-1 rounded">/commit</code>.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
+function SkillsTab({ skills, commands, onRefresh }: {
+  skills: SkillInfo[];
+  commands: CommandInfo[];
+  onRefresh: () => void;
+}) {
+  const { toast } = useToast();
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [installing, setInstalling] = useState<string | null>(null);
+
+  // Get installed skill names
+  const installedNames = new Set(skills.map(s => s.name));
+
+  // Filter templates
+  const filteredTemplates = SKILL_TEMPLATES.filter((template) => {
+    const matchesCategory = categoryFilter === "All" || template.category === categoryFilter;
+    const matchesSearch = !searchQuery ||
+      template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      template.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const handleInstall = async (template: ToolTemplate) => {
+    setInstalling(template.name);
+    try {
+      const res = await fetch("/api/toolbox/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: template.name,
+          content: template.content,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || "Skill installed successfully", "success");
+        onRefresh();
+      } else {
+        toast(data.error || "Installation failed", "error");
+      }
+    } catch (error) {
+      toast("Failed to install skill", "error");
+    } finally {
+      setInstalling(null);
+    }
+  };
+
+  const hasInstalledItems = skills.length > 0 || commands.length > 0;
 
   return (
     <div className="space-y-6">
+      {/* Installed Skills */}
       {skills.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-3">
             <Sparkles className="h-4 w-4 text-amber-500" />
-            <span className="text-sm font-semibold">Skills</span>
+            <span className="text-sm font-semibold">Installed Skills</span>
             <Badge variant="outline" className="text-xs">{skills.length}</Badge>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
@@ -844,6 +1262,7 @@ function SkillsTab({ skills, commands }: { skills: SkillInfo[]; commands: Comman
         </section>
       )}
 
+      {/* Installed Commands */}
       {commands.length > 0 && (
         <section>
           <div className="flex items-center gap-2 mb-3">
@@ -865,6 +1284,96 @@ function SkillsTab({ skills, commands }: { skills: SkillInfo[]; commands: Comman
           </div>
         </section>
       )}
+
+      {/* Separator */}
+      {hasInstalledItems && <div className="border-t my-6" />}
+
+      {/* Skill Templates Marketplace */}
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <ShoppingBag className="h-4 w-4 text-amber-500" />
+          <span className="text-sm font-semibold">Skill Templates</span>
+          <Badge variant="outline" className="text-xs">{SKILL_TEMPLATES.length}</Badge>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-2 mb-3">
+          <div className="flex gap-1 flex-wrap">
+            {TOOL_CATEGORIES.skills.map((cat) => (
+              <Button
+                key={cat}
+                variant={categoryFilter === cat ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setCategoryFilter(cat)}
+              >
+                {cat}
+              </Button>
+            ))}
+          </div>
+          <div className="relative flex-1 sm:max-w-xs">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search templates..."
+              className="w-full h-7 pl-7 pr-2 text-xs border rounded-md bg-background"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Template Cards */}
+        {filteredTemplates.length === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="py-6 text-center">
+              <p className="text-sm text-muted-foreground">No templates found</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {filteredTemplates.map((template) => {
+              const isInstalled = installedNames.has(template.name);
+              return (
+                <Card key={template.name} className="group hover:shadow-md transition-shadow">
+                  <CardContent className="pt-4 pb-3 px-4 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-sm font-mono font-semibold truncate">{template.name}</h3>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                          {template.description}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] flex-shrink-0">
+                        {template.category}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      {isInstalled ? (
+                        <Badge variant="outline" className="text-[10px] text-green-600 dark:text-green-400">
+                          <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                          Installed
+                        </Badge>
+                      ) : (
+                        <div />
+                      )}
+                      <Button
+                        size="sm"
+                        variant={isInstalled ? "outline" : "default"}
+                        className="h-7 text-xs"
+                        onClick={() => handleInstall(template)}
+                        disabled={isInstalled || installing === template.name}
+                      >
+                        {installing === template.name ? "Installing..." : isInstalled ? "Reinstall" : "Install"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -886,18 +1395,256 @@ const HOOK_COLORS: Record<string, string> = {
   PermissionRequest: "bg-amber-500/10 text-amber-500",
 };
 
-function HooksTab({ hooks }: { hooks: HookEntry[] }) {
+// Hook Dialog
+interface HookDialogProps {
+  open: boolean;
+  onClose: () => void;
+  mode: "add" | "edit";
+  hook: HookEntry | null;
+  onSuccess: () => void;
+}
+
+function HookDialog({ open, onClose, mode, hook, onSuccess }: HookDialogProps) {
+  const { toast } = useToast();
+  const [hookType, setHookType] = useState(hook?.type || "PreToolUse");
+  const [matcher, setMatcher] = useState(hook?.matcher || "");
+  const [command, setCommand] = useState(hook?.command || "");
+  const [timeout, setTimeout] = useState<string>(hook?.timeout?.toString() || "");
+  const [description, setDescription] = useState(hook?.description || "");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setHookType(hook?.type || "PreToolUse");
+      setMatcher(hook?.matcher || "");
+      setCommand(hook?.command || "");
+      setTimeout(hook?.timeout?.toString() || "");
+      setDescription(hook?.description || "");
+    }
+  }, [open, hook]);
+
+  if (!open) return null;
+
+  const handleSubmit = async () => {
+    if (!command.trim()) {
+      toast("Command is required", "error");
+      return;
+    }
+
+    setSubmitting(true);
+
+    const requestBody: any = {
+      type: hookType,
+      command: command.trim(),
+    };
+
+    if (matcher.trim()) requestBody.matcher = matcher.trim();
+    if (timeout.trim()) requestBody.timeout = parseInt(timeout);
+    if (description.trim()) requestBody.description = description.trim();
+
+    if (mode === "edit" && hook) {
+      requestBody.index = hook.index;
+    }
+
+    try {
+      const method = mode === "add" ? "POST" : "PUT";
+      const res = await fetch("/api/toolbox/hooks", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || `Hook ${mode === "add" ? "added" : "updated"} successfully`, "success");
+        onSuccess();
+        onClose();
+      } else {
+        toast(data.error || "Operation failed", "error");
+      }
+    } catch (error) {
+      toast("Failed to save hook", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="bg-background border rounded-xl shadow-2xl max-w-xl w-full mx-4 max-h-[80vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-background z-10">
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            {mode === "add" ? "Add Hook" : "Edit Hook"}
+          </h2>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="px-6 py-4 space-y-4">
+          {/* Hook Type */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Hook Type *</label>
+            <select
+              className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+              value={hookType}
+              onChange={(e) => setHookType(e.target.value)}
+              disabled={mode === "edit"}
+            >
+              {HOOK_TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Matcher */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Matcher (optional)</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+              placeholder="e.g., Bash"
+              value={matcher}
+              onChange={(e) => setMatcher(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Filter by tool name (e.g., Bash, Read, Write)
+            </p>
+          </div>
+
+          {/* Command */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Command *</label>
+            <textarea
+              className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background min-h-[80px]"
+              placeholder="node script.js"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+            />
+          </div>
+
+          {/* Timeout */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Timeout (seconds)</label>
+            <input
+              type="number"
+              className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+              placeholder="30"
+              value={timeout}
+              onChange={(e) => setTimeout(e.target.value)}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="text-sm font-medium block mb-1.5">Description</label>
+            <input
+              type="text"
+              className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+              placeholder="Hook description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="px-6 py-4 border-t flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleSubmit} disabled={submitting}>
+            {submitting ? "Saving..." : mode === "add" ? "Add Hook" : "Update Hook"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HooksTab({ hooks, onRefresh }: { hooks: HookEntry[]; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
+  const [editingHook, setEditingHook] = useState<HookEntry | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [hookToDelete, setHookToDelete] = useState<HookEntry | null>(null);
+
+  const handleAddHook = () => {
+    setDialogMode("add");
+    setEditingHook(null);
+    setDialogOpen(true);
+  };
+
+  const handleEditHook = (hook: HookEntry) => {
+    setDialogMode("edit");
+    setEditingHook(hook);
+    setDialogOpen(true);
+  };
+
+  const handleDeleteClick = (hook: HookEntry) => {
+    setHookToDelete(hook);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!hookToDelete) return;
+
+    try {
+      const res = await fetch("/api/toolbox/hooks", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: hookToDelete.type,
+          index: hookToDelete.index,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || "Hook deleted successfully", "success");
+        onRefresh();
+      } else {
+        toast(data.error || "Failed to delete hook", "error");
+      }
+    } catch (error) {
+      toast("Failed to delete hook", "error");
+    } finally {
+      setDeleteDialogOpen(false);
+      setHookToDelete(null);
+    }
+  };
+
   if (hooks.length === 0) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-10 text-center">
-          <Shield className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-          <p className="text-sm font-medium mb-1">No hooks configured</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Hooks run shell commands at lifecycle events (before/after tool use, session start/end, etc.).
-          </p>
-        </CardContent>
-      </Card>
+      <>
+        <div className="flex justify-end mb-3">
+          <Button size="sm" onClick={handleAddHook} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Add Hook
+          </Button>
+        </div>
+        <Card className="border-dashed">
+          <CardContent className="py-10 text-center">
+            <Shield className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+            <p className="text-sm font-medium mb-1">No hooks configured</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Hooks run shell commands at lifecycle events (before/after tool use, session start/end, etc.).
+            </p>
+          </CardContent>
+        </Card>
+        <HookDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          mode={dialogMode}
+          hook={editingHook}
+          onSuccess={onRefresh}
+        />
+      </>
     );
   }
 
@@ -911,120 +1658,399 @@ function HooksTab({ hooks }: { hooks: HookEntry[] }) {
   const allTypes = [...HOOK_TYPES, ...Array.from(grouped.keys()).filter(t => !HOOK_TYPES.includes(t))];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
-        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground">
-          Shell commands that run automatically at lifecycle events. Configured in <code className="bg-muted px-1 rounded">~/.claude/settings.json</code>
-        </p>
+    <>
+      <div className="flex justify-end mb-3">
+        <Button size="sm" onClick={handleAddHook} className="gap-1.5">
+          <Plus className="h-4 w-4" /> Add Hook
+        </Button>
       </div>
-      {allTypes.map((type) => {
-        const items = grouped.get(type);
-        if (!items) return null;
-        const colorClass = HOOK_COLORS[type] || "bg-zinc-500/10 text-zinc-500";
+      <div className="space-y-4">
+        <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
+          <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground">
+            Shell commands that run automatically at lifecycle events. Configured in <code className="bg-muted px-1 rounded">~/.claude/settings.json</code>
+          </p>
+        </div>
+        {allTypes.map((type) => {
+          const items = grouped.get(type);
+          if (!items) return null;
+          const colorClass = HOOK_COLORS[type] || "bg-zinc-500/10 text-zinc-500";
 
-        return (
-          <section key={type}>
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`h-6 px-2 rounded-md text-[11px] font-mono font-semibold flex items-center ${colorClass}`}>
-                {type}
+          return (
+            <section key={type}>
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`h-6 px-2 rounded-md text-[11px] font-mono font-semibold flex items-center ${colorClass}`}>
+                  {type}
+                </div>
+                <Badge variant="outline" className="text-[10px]">{items.length} hook{items.length > 1 ? "s" : ""}</Badge>
               </div>
-              <Badge variant="outline" className="text-[10px]">{items.length} hook{items.length > 1 ? "s" : ""}</Badge>
-            </div>
-            <div className="space-y-1.5">
-              {items.map((hook, i) => (
-                <Card key={i} className="bg-muted/20">
-                  <CardContent className="py-2.5 px-3 space-y-1.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        {hook.description && (
-                          <p className="text-xs text-foreground/80 mb-1">{hook.description}</p>
-                        )}
-                        {hook.matcher && (
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-[10px] text-muted-foreground">match:</span>
-                            <code className="text-[11px] bg-muted px-1.5 py-0.5 rounded font-mono">{hook.matcher}</code>
+              <div className="space-y-1.5">
+                {items.map((hook, i) => (
+                  <Card key={i} className="bg-muted/20 group hover:shadow-md transition-shadow">
+                    <CardContent className="py-2.5 px-3 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          {hook.description && (
+                            <p className="text-xs text-foreground/80 mb-1">{hook.description}</p>
+                          )}
+                          {hook.matcher && (
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-[10px] text-muted-foreground">match:</span>
+                              <code className="text-[11px] bg-muted px-1.5 py-0.5 rounded font-mono">{hook.matcher}</code>
+                            </div>
+                          )}
+                          <div className="bg-zinc-900 dark:bg-zinc-950 text-green-400 px-2.5 py-1.5 rounded font-mono text-[11px] break-all">
+                            $ {hook.command}
                           </div>
-                        )}
-                        <div className="bg-zinc-900 dark:bg-zinc-950 text-green-400 px-2.5 py-1.5 rounded font-mono text-[11px] break-all">
-                          $ {hook.command}
+                        </div>
+                        <div className="flex items-start gap-1">
+                          {hook.timeout && (
+                            <Badge variant="outline" className="text-[10px] flex-shrink-0">
+                              <Clock className="h-2.5 w-2.5 mr-0.5" /> {hook.timeout}s
+                            </Badge>
+                          )}
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() => handleEditHook(hook)}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                              onClick={() => handleDeleteClick(hook)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                      {hook.timeout && (
-                        <Badge variant="outline" className="text-[10px] flex-shrink-0">
-                          <Clock className="h-2.5 w-2.5 mr-0.5" /> {hook.timeout}s
-                        </Badge>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <HookDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        mode={dialogMode}
+        hook={editingHook}
+        onSuccess={onRefresh}
+      />
+
+      {/* Delete Confirmation */}
+      {deleteDialogOpen && hookToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeleteDialogOpen(false)}>
+          <div
+            className="bg-background border rounded-xl shadow-2xl max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Delete Hook
+              </h2>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setDeleteDialogOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-          </section>
-        );
-      })}
-    </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete this{" "}
+                <span className="font-mono font-semibold text-foreground">{hookToDelete.type}</span> hook?
+              </p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                This action cannot be undone.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="destructive" onClick={handleDeleteConfirm}>
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 // ---- Agents Tab ----
 
-function AgentsTab({ agents }: { agents: AgentInfo[] }) {
+function AgentsTab({ agents, onRefresh }: { agents: AgentInfo[]; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
+  const [editingAgent, setEditingAgent] = useState<AgentInfo | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [agentToDelete, setAgentToDelete] = useState<AgentInfo | null>(null);
+
+  const handleAddAgent = () => {
+    setDialogMode("add");
+    setEditingAgent(null);
+    setDialogOpen(true);
+  };
+
+  const handleEditAgent = (agent: AgentInfo) => {
+    setDialogMode("edit");
+    setEditingAgent(agent);
+    setDialogOpen(true);
+  };
+
+  const handleDeleteClick = (agent: AgentInfo) => {
+    setAgentToDelete(agent);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!agentToDelete) return;
+
+    try {
+      const res = await fetch("/api/toolbox/agents", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: agentToDelete.name }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || "Agent deleted successfully", "success");
+        onRefresh();
+      } else {
+        toast(data.error || "Failed to delete agent", "error");
+      }
+    } catch (error) {
+      toast("Failed to delete agent", "error");
+    } finally {
+      setDeleteDialogOpen(false);
+      setAgentToDelete(null);
+    }
+  };
+
   if (agents.length === 0) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-10 text-center">
-          <Bot className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-          <p className="text-sm font-medium mb-1">No custom agents found</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Custom agents define specialized personas with their own prompts and tool access.
-            Create them at <code className="bg-muted px-1 rounded">~/.claude/agents/</code>.
-          </p>
-        </CardContent>
-      </Card>
+      <>
+        <div className="flex justify-end mb-3">
+          <Button size="sm" onClick={handleAddAgent} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Create Agent
+          </Button>
+        </div>
+        <Card className="border-dashed">
+          <CardContent className="py-10 text-center">
+            <Bot className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+            <p className="text-sm font-medium mb-1">No custom agents found</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Custom agents define specialized personas with their own prompts and tool access.
+              Create them at <code className="bg-muted px-1 rounded">~/.claude/agents/</code>.
+            </p>
+          </CardContent>
+        </Card>
+        <AgentDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          mode={dialogMode}
+          agent={editingAgent}
+          onSuccess={onRefresh}
+        />
+      </>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
-        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground">
-          Custom agent definitions with specialized prompts and tool access. Located in <code className="bg-muted px-1 rounded">~/.claude/agents/</code>
-        </p>
+    <>
+      <div className="flex justify-end mb-3">
+        <Button size="sm" onClick={handleAddAgent} className="gap-1.5">
+          <Plus className="h-4 w-4" /> Create Agent
+        </Button>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-      {agents.map((agent) => (
-        <ExpandableCard
-          key={agent.name}
-          title={agent.name}
-          subtitle={agent.description}
-          icon={<div className="h-7 w-7 rounded-md bg-pink-500/10 flex items-center justify-center flex-shrink-0"><Bot className="h-3.5 w-3.5 text-pink-500" /></div>}
-          badge={<Badge variant="secondary" className="text-[10px]">Agent</Badge>}
-        >
-          <MarkdownContent content={agent.content} className="text-xs" />
-        </ExpandableCard>
-      ))}
+      <div className="space-y-4">
+        <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
+          <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground">
+            Custom agent definitions with specialized prompts and tool access. Located in <code className="bg-muted px-1 rounded">~/.claude/agents/</code>
+          </p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+        {agents.map((agent) => (
+          <div key={agent.name} className="group relative">
+            <Card className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2 min-w-0">
+                    <div className="h-7 w-7 rounded-md bg-pink-500/10 flex items-center justify-center flex-shrink-0"><Bot className="h-3.5 w-3.5 text-pink-500" /></div>
+                    <div className="min-w-0">
+                      <CardTitle className="text-sm font-mono truncate">{agent.name}</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{agent.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => { e.stopPropagation(); handleEditAgent(agent); }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteClick(agent); }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+          </div>
+        ))}
+        </div>
       </div>
-    </div>
+
+      <AgentDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        mode={dialogMode}
+        agent={editingAgent}
+        onSuccess={onRefresh}
+      />
+
+      {/* Delete Confirmation */}
+      {deleteDialogOpen && agentToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeleteDialogOpen(false)}>
+          <div
+            className="bg-background border rounded-xl shadow-2xl max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Delete Agent
+              </h2>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setDeleteDialogOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete the agent{" "}
+                <span className="font-mono font-semibold text-foreground">{agentToDelete.name}</span>?
+              </p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                This action cannot be undone.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="destructive" onClick={handleDeleteConfirm}>
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 // ---- Rules Tab ----
 
-function RulesTab({ rules }: { rules: RuleInfo[] }) {
+function RulesTab({ rules, onRefresh }: { rules: RuleInfo[]; onRefresh: () => void }) {
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
+  const [editingRule, setEditingRule] = useState<RuleInfo | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [ruleToDelete, setRuleToDelete] = useState<RuleInfo | null>(null);
+
+  const handleAddRule = () => {
+    setDialogMode("add");
+    setEditingRule(null);
+    setDialogOpen(true);
+  };
+
+  const handleEditRule = (rule: RuleInfo) => {
+    setDialogMode("edit");
+    setEditingRule(rule);
+    setDialogOpen(true);
+  };
+
+  const handleDeleteClick = (rule: RuleInfo) => {
+    setRuleToDelete(rule);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!ruleToDelete) return;
+
+    try {
+      const res = await fetch("/api/toolbox/rules", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: ruleToDelete.path }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        toast(data.message || "Rule deleted successfully", "success");
+        onRefresh();
+      } else {
+        toast(data.error || "Failed to delete rule", "error");
+      }
+    } catch (error) {
+      toast("Failed to delete rule", "error");
+    } finally {
+      setDeleteDialogOpen(false);
+      setRuleToDelete(null);
+    }
+  };
+
+  const existingGroups = Array.from(new Set(rules.map(r => r.group)));
+
   if (rules.length === 0) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="py-10 text-center">
-          <BookOpen className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-          <p className="text-sm font-medium mb-1">No rules found</p>
-          <p className="text-xs text-muted-foreground max-w-md mx-auto">
-            Rules are instruction files Claude follows automatically.
-            Organize them by topic at <code className="bg-muted px-1 rounded">~/.claude/rules/</code>.
-          </p>
-        </CardContent>
-      </Card>
+      <>
+        <div className="flex justify-end mb-3">
+          <Button size="sm" onClick={handleAddRule} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Create Rule
+          </Button>
+        </div>
+        <Card className="border-dashed">
+          <CardContent className="py-10 text-center">
+            <BookOpen className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+            <p className="text-sm font-medium mb-1">No rules found</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Rules are instruction files Claude follows automatically.
+              Organize them by topic at <code className="bg-muted px-1 rounded">~/.claude/rules/</code>.
+            </p>
+          </CardContent>
+        </Card>
+        <RuleDialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          mode={dialogMode}
+          rule={editingRule}
+          existingGroups={["common"]}
+          onSuccess={onRefresh}
+        />
+      </>
     );
   }
 
@@ -1036,47 +2062,125 @@ function RulesTab({ rules }: { rules: RuleInfo[] }) {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
-        <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground">
-          Instruction files Claude follows automatically. Organized by category in <code className="bg-muted px-1 rounded">~/.claude/rules/</code>
-        </p>
+    <>
+      <div className="flex justify-end mb-3">
+        <Button size="sm" onClick={handleAddRule} className="gap-1.5">
+          <Plus className="h-4 w-4" /> Create Rule
+        </Button>
       </div>
-      {Array.from(grouped.entries()).map(([group, items]) => (
-        <section key={group}>
-          <div className="flex items-center gap-2 mb-2">
-            <FolderOpen className="h-4 w-4 text-cyan-500" />
-            <span className="text-sm font-semibold">{group}</span>
-            <Badge variant="outline" className="text-xs">{items.length}</Badge>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            {items.map((rule) => {
-              // Skip heading lines for subtitle
-              const previewLines = rule.preview.split("\n").filter(l => l.trim());
-              let subtitle = "";
-              for (const line of previewLines) {
-                if (!line.match(/^#+\s/)) {
-                  subtitle = line.slice(0, 80);
-                  break;
+      <div className="space-y-5">
+        <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
+          <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground">
+            Instruction files Claude follows automatically. Organized by category in <code className="bg-muted px-1 rounded">~/.claude/rules/</code>
+          </p>
+        </div>
+        {Array.from(grouped.entries()).map(([group, items]) => (
+          <section key={group}>
+            <div className="flex items-center gap-2 mb-2">
+              <FolderOpen className="h-4 w-4 text-cyan-500" />
+              <span className="text-sm font-semibold">{group}</span>
+              <Badge variant="outline" className="text-xs">{items.length}</Badge>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+              {items.map((rule) => {
+                const previewLines = rule.preview.split("\n").filter(l => l.trim());
+                let subtitle = "";
+                for (const line of previewLines) {
+                  if (!line.match(/^#+\s/)) {
+                    subtitle = line.slice(0, 80);
+                    break;
+                  }
                 }
-              }
 
-              return (
-                <ExpandableCard
-                  key={rule.path}
-                  title={rule.name}
-                  subtitle={subtitle}
-                  icon={<div className="h-7 w-7 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0"><BookOpen className="h-3.5 w-3.5 text-cyan-500" /></div>}
-                >
-                  <MarkdownContent content={rule.content} className="text-xs" />
-                </ExpandableCard>
-              );
-            })}
+                return (
+                  <div key={rule.path} className="group relative">
+                    <Card className="hover:shadow-md transition-shadow">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <div className="h-7 w-7 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0"><BookOpen className="h-3.5 w-3.5 text-cyan-500" /></div>
+                            <div className="min-w-0">
+                              <CardTitle className="text-sm font-mono truncate">{rule.name}</CardTitle>
+                              {subtitle && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{subtitle}</p>}
+                            </div>
+                          </div>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => { e.stopPropagation(); handleEditRule(rule); }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteClick(rule); }}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                    </Card>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <RuleDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        mode={dialogMode}
+        rule={editingRule}
+        existingGroups={existingGroups}
+        onSuccess={onRefresh}
+      />
+
+      {/* Delete Confirmation */}
+      {deleteDialogOpen && ruleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeleteDialogOpen(false)}>
+          <div
+            className="bg-background border rounded-xl shadow-2xl max-w-md w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                Delete Rule
+              </h2>
+              <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setDeleteDialogOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="px-6 py-4">
+              <p className="text-sm text-muted-foreground">
+                Are you sure you want to delete the rule{" "}
+                <span className="font-mono font-semibold text-foreground">{ruleToDelete.name}</span> from group{" "}
+                <span className="font-semibold">{ruleToDelete.group}</span>?
+              </p>
+              <p className="text-sm text-red-600 dark:text-red-400 mt-2">
+                This action cannot be undone.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="destructive" onClick={handleDeleteConfirm}>
+                Delete
+              </Button>
+            </div>
           </div>
-        </section>
-      ))}
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1183,16 +2287,16 @@ export default function ToolboxPage() {
           <MCPTab data={data.mcp} health={health} onCheckHealth={checkHealth} onRefresh={fetchData} />
         </TabsContent>
         <TabsContent value="skills">
-          <SkillsTab skills={data.skills} commands={data.commands} />
+          <SkillsTab skills={data.skills} commands={data.commands} onRefresh={fetchData} />
         </TabsContent>
         <TabsContent value="hooks">
-          <HooksTab hooks={data.hooks} />
+          <HooksTab hooks={data.hooks} onRefresh={fetchData} />
         </TabsContent>
         <TabsContent value="agents">
-          <AgentsTab agents={data.agents} />
+          <AgentsTab agents={data.agents} onRefresh={fetchData} />
         </TabsContent>
         <TabsContent value="rules">
-          <RulesTab rules={data.rules} />
+          <RulesTab rules={data.rules} onRefresh={fetchData} />
         </TabsContent>
       </Tabs>
 

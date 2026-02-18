@@ -48,6 +48,7 @@ export interface HookEntry {
   command: string;
   timeout?: number;
   description?: string;
+  index?: number; // Index in the hooks[type] array
 }
 
 export interface ToolboxData {
@@ -224,7 +225,8 @@ export function getHooksConfig(): HookEntry[] {
       if (settings.hooks && typeof settings.hooks === "object") {
         for (const [hookType, hookDef] of Object.entries(settings.hooks)) {
           const entries = Array.isArray(hookDef) ? hookDef : [hookDef];
-          for (const h of entries) {
+          for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+            const h = entries[entryIndex];
             if (!h || typeof h !== "object") continue;
             const hook = h as Record<string, unknown>;
 
@@ -239,6 +241,7 @@ export function getHooksConfig(): HookEntry[] {
                     command: inner.command,
                     timeout: (inner.timeout ?? hook.timeout) as number | undefined,
                     description: hook.description as string | undefined,
+                    index: entryIndex,
                   });
                 }
               }
@@ -250,6 +253,7 @@ export function getHooksConfig(): HookEntry[] {
                 command: hook.command,
                 timeout: hook.timeout as number | undefined,
                 description: hook.description as string | undefined,
+                index: entryIndex,
               });
             }
           }
