@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { shortModel } from "@/lib/format-utils";
 
 // ---- Types ----
 
@@ -93,13 +94,6 @@ function formatTime(ts: string) {
   } catch {
     return "";
   }
-}
-
-function shortModel(model: string) {
-  if (model.includes("opus")) return "Opus";
-  if (model.includes("sonnet")) return "Sonnet";
-  if (model.includes("haiku")) return "Haiku";
-  return model;
 }
 
 // Agent type → icon + color

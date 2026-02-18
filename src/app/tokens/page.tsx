@@ -4,9 +4,16 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, TrendingUp, ArrowUpRight, ArrowDownRight, RefreshCw, Info, Database, Download,
 } from "lucide-react";
+import {
+  AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+} from "recharts";
+import type { PieLabelRenderProps } from "recharts";
+import { fmtCost, fmtTokens } from "@/lib/format-utils";
 
 interface TokensData {
   totalInput: number;
@@ -17,14 +24,6 @@ interface TokensData {
   byDate: Record<string, { input: number; output: number; cost: number; sessions: number }>;
   sessionCount: number;
 }
-
-function fmtTokens(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return n.toString();
-}
-
-function fmtCost(n: number): string { return "$" + n.toFixed(2); }
 
 const MODEL_NAMES: Record<string, string> = {
   "claude-opus-4-6": "Opus 4.6",
@@ -38,22 +37,39 @@ const MODEL_COLORS: Record<string, string> = {
   "claude-haiku-4-5": "#f59e0b",
 };
 
-function BarChart({ data }: { data: { label: string; value: number; color: string; extra?: string }[] }) {
-  const max = Math.max(...data.map(d => d.value), 0.01);
+// Custom Tooltip for dark mode support
+function CustomTooltip({ active, payload }: any) {
+  if (!active || !payload || !payload.length) return null;
   return (
-    <div className="space-y-2.5">
-      {data.map((item, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <div className="w-28 text-xs text-muted-foreground truncate">{item.label}</div>
-          <div className="flex-1 h-7 bg-muted/50 rounded overflow-hidden relative">
-            <div className="h-full rounded transition-all" style={{ width: `${(item.value / max) * 100}%`, backgroundColor: item.color }} />
-            <span className="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono font-medium">
-              {fmtCost(item.value)}
-            </span>
-          </div>
-          {item.extra && <div className="w-20 text-xs text-muted-foreground text-right">{item.extra}</div>}
-        </div>
-      ))}
+    <div className="bg-card border border-border rounded-md px-3 py-2 shadow-md">
+      <p className="text-sm font-medium">{payload[0].name}</p>
+      <p className="text-xs text-muted-foreground mt-1">
+        {payload[0].payload.sessions} sessions
+      </p>
+      <p className="text-sm font-mono font-bold mt-1">{fmtCost(payload[0].value)}</p>
+    </div>
+  );
+}
+
+// Custom Tooltip for AreaChart
+function DailyTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  const data = payload[0].payload;
+  return (
+    <div className="bg-card border border-border rounded-md px-3 py-2 shadow-md">
+      <p className="text-sm font-medium font-mono">{label}</p>
+      <div className="mt-2 space-y-1">
+        <p className="text-xs text-muted-foreground">
+          Sessions: <span className="font-mono">{data.sessions}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Input: <span className="font-mono">{fmtTokens(data.input)}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Output: <span className="font-mono">{fmtTokens(data.output)}</span>
+        </p>
+        <p className="text-sm font-mono font-bold mt-1">{fmtCost(data.cost)}</p>
+      </div>
     </div>
   );
 }
@@ -76,23 +92,97 @@ export default function TokensPage() {
     document.body.removeChild(a);
   };
 
-  if (loading) return <div className="flex items-center justify-center h-64"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Token Usage & Cost</h1>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-40" />
+            <Skeleton className="h-9 w-40" />
+          </div>
+        </div>
+
+        {/* Stats Cards Skeleton */}
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {[...Array(5)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-20" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-24 mb-1" />
+                <Skeleton className="h-3 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Cost by Model Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-[280px] w-full" />
+            </CardContent>
+          </Card>
+
+          {/* Pricing Reference Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-40" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-6 w-full" />
+                ))}
+              </div>
+              <Skeleton className="h-20 w-full mt-4" />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Daily Usage Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-36" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-[280px] w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!data) return <div className="text-center py-16"><DollarSign className="h-12 w-12 mx-auto text-muted-foreground mb-4" /><h2 className="text-lg">No data</h2></div>;
 
+  // Prepare model data for PieChart
   const modelData = Object.entries(data.byModel)
     .filter(([, v]) => v.cost > 0)
     .map(([model, stats]) => ({
-      label: MODEL_NAMES[model] || model.split("-").slice(-2).join(" "),
+      name: MODEL_NAMES[model] || model.split("-").slice(-2).join(" "),
       value: stats.cost,
       color: MODEL_COLORS[model] || "#888",
-      extra: `${stats.sessions} sessions`,
+      sessions: stats.sessions,
     }))
     .sort((a, b) => b.value - a.value);
 
+  // Prepare date data for AreaChart (chronological order)
   const dateData = Object.entries(data.byDate)
     .filter(([k]) => k !== "unknown")
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .slice(0, 14);
+    .sort((a, b) => a[0].localeCompare(b[0])) // Chronological order
+    .map(([date, stats]) => ({
+      date,
+      cost: stats.cost,
+      input: stats.input,
+      output: stats.output,
+      sessions: stats.sessions,
+    }))
+    .slice(-14); // Last 14 days
 
   return (
     <div className="space-y-6">
@@ -156,11 +246,35 @@ export default function TokensPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Cost by Model */}
+        {/* Cost by Model - PieChart */}
         <Card>
           <CardHeader><CardTitle className="text-base">Cost by Model</CardTitle></CardHeader>
           <CardContent>
-            {modelData.length > 0 ? <BarChart data={modelData} /> : <div className="text-center text-muted-foreground py-6 text-sm">No data (only first 30 lines of each session are scanned)</div>}
+            {modelData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie
+                    data={modelData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    label={(props: PieLabelRenderProps) => `${props.name ?? ""} ${(((props.percent ?? 0) as number) * 100).toFixed(0)}%`}
+                    labelLine={{ stroke: "hsl(var(--foreground))", strokeWidth: 1 }}
+                  >
+                    {modelData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="text-center text-muted-foreground py-6 text-sm">No data (only first 30 lines of each session are scanned)</div>
+            )}
           </CardContent>
         </Card>
 
@@ -194,44 +308,44 @@ export default function TokensPage() {
         </Card>
       </div>
 
-      {/* Daily Usage */}
+      {/* Daily Usage - AreaChart */}
       <Card>
-        <CardHeader><CardTitle className="text-base">Daily Usage</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Daily Cost Trend</CardTitle></CardHeader>
         <CardContent>
           {dateData.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs text-muted-foreground border-b">
-                    <th className="text-left py-2 font-medium">Date</th>
-                    <th className="text-right py-2 font-medium">Sessions</th>
-                    <th className="text-right py-2 font-medium">Input</th>
-                    <th className="text-right py-2 font-medium">Output</th>
-                    <th className="text-right py-2 font-medium">Est. Cost</th>
-                    <th className="text-right py-2 font-medium w-48">Distribution</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dateData.map(([date, stats]) => {
-                    const maxCost = Math.max(...dateData.map(([, s]) => s.cost), 0.01);
-                    return (
-                      <tr key={date} className="border-b border-border/30 hover:bg-muted/30">
-                        <td className="py-2 font-mono">{date}</td>
-                        <td className="text-right py-2">{stats.sessions}</td>
-                        <td className="text-right py-2 font-mono">{fmtTokens(stats.input)}</td>
-                        <td className="text-right py-2 font-mono">{fmtTokens(stats.output)}</td>
-                        <td className="text-right py-2 font-mono font-medium">{fmtCost(stats.cost)}</td>
-                        <td className="text-right py-2">
-                          <div className="h-4 bg-muted/50 rounded overflow-hidden inline-block w-full">
-                            <div className="h-full bg-primary/60 rounded" style={{ width: `${(stats.cost / maxCost) * 100}%` }} />
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={dateData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="costGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  tickLine={{ stroke: "hsl(var(--border))" }}
+                  angle={-45}
+                  textAnchor="end"
+                  height={60}
+                />
+                <YAxis
+                  tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 11 }}
+                  tickLine={{ stroke: "hsl(var(--border))" }}
+                  tickFormatter={(v) => fmtCost(v)}
+                />
+                <Tooltip content={<DailyTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="cost"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  fill="url(#costGradient)"
+                  animationDuration={800}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
           ) : (
             <div className="text-center text-muted-foreground py-6 text-sm">No daily data available</div>
           )}

@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Users, ListTodo, CheckCircle, FolderOpen, Cpu, Clock,
   ArrowRight, Wrench, FileEdit, Coins, Zap, Activity,
 } from "lucide-react";
 import Link from "next/link";
+import { fmtCost, fmtTokens, timeAgo, shortModel } from "@/lib/format-utils";
+import { AreaChart, Area, ResponsiveContainer } from "recharts";
 
 // ---- Types ----
 
@@ -52,36 +55,11 @@ interface SessionsData {
   recentSessions: SessionInfo[];
 }
 
+interface TokensData {
+  byDate: Record<string, { input: number; output: number; cost: number; sessions: number }>;
+}
+
 // ---- Helpers ----
-
-function timeAgo(ms: number) {
-  if (!ms) return "";
-  const diff = Date.now() - ms;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "Just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
-
-function fmtCost(n: number): string {
-  return "$" + n.toFixed(2);
-}
-
-function fmtTokens(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-  return n.toString();
-}
-
-function shortModel(m?: string) {
-  if (!m) return "";
-  if (m.includes("opus")) return "Opus";
-  if (m.includes("sonnet")) return "Sonnet";
-  if (m.includes("haiku")) return "Haiku";
-  return m;
-}
 
 type SessionStatus = "reading" | "thinking" | "writing" | "waiting" | "completed" | "error" | "idle";
 
@@ -101,11 +79,16 @@ export default function HomePage() {
   const [teams, setTeams] = useState<TeamSummary | null>(null);
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
   const [sessions, setSessions] = useState<SessionsData | null>(null);
+  const [tokensData, setTokensData] = useState<TokensData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/teams").then((r) => r.json()).then(setTeams).catch(() => {});
-    fetch("/api/processes").then((r) => r.json()).then((d) => setProcesses(d.processes || [])).catch(() => {});
-    fetch("/api/sessions").then((r) => r.json()).then(setSessions).catch(() => {});
+    Promise.all([
+      fetch("/api/teams").then((r) => r.json()).then(setTeams).catch(() => {}),
+      fetch("/api/processes").then((r) => r.json()).then((d) => setProcesses(d.processes || [])).catch(() => {}),
+      fetch("/api/sessions").then((r) => r.json()).then(setSessions).catch(() => {}),
+      fetch("/api/tokens").then((r) => r.json()).then(setTokensData).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
   const totalTeams = teams?.teams.length || 0;
@@ -117,6 +100,116 @@ export default function HomePage() {
   const totalCost = sessions?.recentSessions.reduce((s, x) => s + x.estimatedCost, 0) || 0;
   const totalInputTokens = sessions?.recentSessions.reduce((s, x) => s + x.totalInputTokens, 0) || 0;
   const totalOutputTokens = sessions?.recentSessions.reduce((s, x) => s + x.totalOutputTokens, 0) || 0;
+
+  // Prepare sparkline data (last 7 days)
+  const sparklineData = tokensData
+    ? Object.entries(tokensData.byDate)
+        .filter(([k]) => k !== "unknown")
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .slice(-7)
+        .map(([date, stats]) => ({ cost: stats.cost }))
+    : [];
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold">Overview</h1>
+
+        {/* Stats Cards Skeleton */}
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-20" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-9 w-16" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Active Processes Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-40" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Token Usage Summary Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-48" />
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="text-center">
+                    <Skeleton className="h-3 w-20 mx-auto mb-1" />
+                    <Skeleton className="h-6 w-24 mx-auto" />
+                  </div>
+                ))}
+              </div>
+              <Skeleton className="h-16 w-full mb-4" />
+              <Skeleton className="h-5 w-full" />
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Recent Sessions Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-5 w-40" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Quick Actions Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-2">
+                {[...Array(4)].map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Active Teams Skeleton */}
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full" />
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -243,6 +336,29 @@ export default function HomePage() {
                 <div className="text-lg font-bold font-mono">{sessions?.totalSessions || 0}</div>
               </div>
             </div>
+            {sparklineData.length > 0 && (
+              <div className="mt-4">
+                <div className="text-xs text-muted-foreground mb-1">Daily Cost Trend (7 days)</div>
+                <ResponsiveContainer width="100%" height={60}>
+                  <AreaChart data={sparklineData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="miniCostGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <Area
+                      type="monotone"
+                      dataKey="cost"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={1.5}
+                      fill="url(#miniCostGradient)"
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
             <div className="mt-4 pt-3 border-t">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Estimated Total Cost</span>

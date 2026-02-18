@@ -388,7 +388,7 @@ export interface ProjectsSummary {
 export function getProjectsSummary(): ProjectsSummary {
   const projects = listProjects();
   const totalSessions = projects.reduce((s, p) => s + p.sessionCount, 0);
-  const recentSessions = getRecentSessions(500);
+  const recentSessions = getRecentSessions(9999);
   return { projects, totalSessions, recentSessions };
 }
 
@@ -405,7 +405,7 @@ export interface TokenSummary {
 }
 
 export function getTokenSummary(): TokenSummary {
-  const sessions = getRecentSessions(100);
+  const sessions = getRecentSessions(9999);
   let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCost = 0;
   const byModel: TokenSummary["byModel"] = {};
   const byDate: TokenSummary["byDate"] = {};
