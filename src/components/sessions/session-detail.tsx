@@ -8,11 +8,13 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { TerminalView } from "@/components/terminal-view";
 import {
   RefreshCw, ArrowLeft, Wrench, ChevronsUp, ChevronsDown, MapPin,
-  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download,
+  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download, BarChart3,
 } from "lucide-react";
 import { fmtCost, fmtTokens, shortModel } from "@/lib/format-utils";
 import { ConvMessage } from "./conv-message";
+import { SessionAnalytics } from "./session-analytics";
 import type { SessionDetail, FilePreview } from "./types";
+import { useToast } from "@/components/toast";
 
 export function SessionDetailView({ projectPath, sessionId, onBack }: {
   projectPath: string;
@@ -24,6 +26,7 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
   const [showTools, setShowTools] = useState(true);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
   const [showFiles, setShowFiles] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
   const [previewFile, setPreviewFile] = useState<FilePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [convSearch, setConvSearch] = useState("");
@@ -35,6 +38,7 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
     return "card";
   });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     setLoading(true);
@@ -112,7 +116,9 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [detail]);
+
+    toast("Session exported as Markdown");
+  }, [detail, toast]);
 
   // Compute search matches (must be before early returns to keep hook order stable)
   const allVisible = useMemo(() => {
@@ -186,14 +192,17 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
           <Button variant={showTools ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => setShowTools(!showTools)}>
             <Wrench className="h-3 w-3 mr-1" />Tools
           </Button>
-          <Button variant={showCheckpoints ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => { setShowCheckpoints(!showCheckpoints); setShowFiles(false); }}>
+          <Button variant={showCheckpoints ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => { setShowCheckpoints(!showCheckpoints); setShowFiles(false); setShowAnalytics(false); }}>
             <MapPin className="h-3 w-3 mr-1" />Checkpoints ({detail.checkpoints.length})
           </Button>
           {detail.contextFiles.length > 0 && (
-            <Button variant={showFiles ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => { setShowFiles(!showFiles); setShowCheckpoints(false); }}>
+            <Button variant={showFiles ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => { setShowFiles(!showFiles); setShowCheckpoints(false); setShowAnalytics(false); }}>
               <FileText className="h-3 w-3 mr-1" />Files ({detail.contextFiles.length})
             </Button>
           )}
+          <Button variant={showAnalytics ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => { setShowAnalytics(!showAnalytics); setShowCheckpoints(false); setShowFiles(false); }}>
+            <BarChart3 className="h-3 w-3 mr-1" />Analytics
+          </Button>
           <Button variant="outline" size="sm" className="text-xs h-7" onClick={exportAsMarkdown} title="Export as Markdown">
             <Download className="h-3 w-3 mr-1" />Export
           </Button>
@@ -252,8 +261,8 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
 
       {/* Card View Mode */}
       {viewMode === "card" && (<div className="flex flex-1 overflow-hidden">
-        {/* Sidebar: checkpoints or files */}
-        {(showCheckpoints || showFiles) && (
+        {/* Sidebar: checkpoints, files, or analytics */}
+        {(showCheckpoints || showFiles || showAnalytics) && (
           <div className="w-64 border-r overflow-auto bg-muted/5 flex-shrink-0">
             {showCheckpoints && (
               <div className="p-2 space-y-1">
@@ -286,6 +295,7 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
                 ))}
               </div>
             )}
+            {showAnalytics && <SessionAnalytics detail={detail} />}
           </div>
         )}
 

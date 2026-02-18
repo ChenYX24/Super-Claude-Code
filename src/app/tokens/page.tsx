@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import type { PieLabelRenderProps } from "recharts";
 import { fmtCost, fmtTokens } from "@/lib/format-utils";
+import { useToast } from "@/components/toast";
 
 interface TokensData {
   totalInput: number;
@@ -77,6 +78,7 @@ function DailyTooltip({ active, payload, label }: any) {
 export default function TokensPage() {
   const [data, setData] = useState<TokensData | null>(null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetch("/api/tokens").then(r => r.json()).then((d: TokensData) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
@@ -90,6 +92,7 @@ export default function TokensPage() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    toast(`Token ${type} CSV exported`);
   };
 
   if (loading) {

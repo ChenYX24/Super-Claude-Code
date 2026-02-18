@@ -13,9 +13,12 @@ import {
   Settings,
   Menu,
   X,
+  Keyboard,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { ShortcutsHelp } from "@/components/shortcuts-help";
 
 const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -31,8 +34,18 @@ export function SidebarNav() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
 
+  // Enable keyboard shortcuts
+  useKeyboardShortcuts();
+
+  const handleShowHelp = () => {
+    document.dispatchEvent(new CustomEvent("toggle-shortcuts-help"));
+  };
+
   return (
     <>
+      {/* Keyboard Shortcuts Help Modal */}
+      <ShortcutsHelp />
+
       {/* Mobile Hamburger Button */}
       <Button
         variant="ghost"
@@ -96,7 +109,18 @@ export function SidebarNav() {
           })}
         </nav>
         <div className="flex items-center justify-between pt-4 border-t">
-          <span className="text-xs text-muted-foreground">v0.5.0</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">v0.5.0</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 opacity-70 hover:opacity-100 transition-opacity"
+              onClick={handleShowHelp}
+              title="Keyboard shortcuts (?)"
+            >
+              <Keyboard className="h-3.5 w-3.5" />
+            </Button>
+          </div>
           <ThemeToggle />
         </div>
       </aside>

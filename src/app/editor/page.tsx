@@ -10,6 +10,7 @@ import {
   Folder, FolderOpen, ChevronRight, ArrowUp, FileText,
   Trash2, HardDrive,
 } from "lucide-react";
+import { useToast } from "@/components/toast";
 
 interface ProjectOption {
   encoded: string;
@@ -50,6 +51,7 @@ export default function EditorPage() {
   const [createError, setCreateError] = useState<string>("");
 
   const dialogRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const loadFileList = useCallback(() => {
     fetch("/api/claudemd")
@@ -95,12 +97,17 @@ export default function EditorPage() {
         setOriginalContent(content);
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
+        toast("CLAUDE.md saved successfully");
       } else {
         setSaveStatus("error");
+        toast("Failed to save CLAUDE.md", "error");
       }
-    } catch { setSaveStatus("error"); }
+    } catch {
+      setSaveStatus("error");
+      toast("Failed to save CLAUDE.md", "error");
+    }
     finally { setSaving(false); }
-  }, [selectedFile, content]);
+  }, [selectedFile, content, toast]);
 
   // Delete
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
