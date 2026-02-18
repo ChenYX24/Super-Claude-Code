@@ -180,7 +180,7 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
             onClick={() => toggleFavorite(sessionId)}
             title={isFavorite(sessionId) ? "Remove from favorites" : "Add to favorites"}
           >
-            <Star className={`h-4 w-4 ${isFavorite(sessionId) ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"}`} />
+            <Star className={`h-4 w-4 ${isFavorite(sessionId) ? "text-yellow-400" : "text-muted-foreground"}`} fill={isFavorite(sessionId) ? "currentColor" : "none"} />
           </Button>
           {/* View mode toggle */}
           <div className="flex items-center gap-0.5 border rounded-md p-0.5 mr-1">

@@ -63,29 +63,29 @@ export function SessionBlock({ session, onClick, searchQuery, isFavorite, onTogg
       `}
       title={`${session.firstMessage || session.id.slice(0, 12)}\n${session.projectName}\n${timeAgo(session.lastActive)}`}
     >
-      {/* Star icon (top-left) */}
-      {onToggleFavorite && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite(session.id);
-          }}
-          className={`absolute top-2 left-2 z-10 transition-colors ${
-            isFavorite
-              ? "text-yellow-400 fill-yellow-400"
-              : "text-muted-foreground hover:text-yellow-400"
-          }`}
-          title={isFavorite ? "Remove from favorites" : "Add to favorites"}
-        >
-          <Star className="h-4 w-4" />
-        </button>
-      )}
-
       {/* Status indicator dot with animation */}
       <div className={`absolute top-2 right-2 h-2.5 w-2.5 rounded-full ${cfg.dot} ${cfg.animation || ""}`} />
 
-      {/* Model color bar */}
-      <div className={`h-1 w-8 rounded-full ${modelColor} mb-2 opacity-70`} />
+      {/* Star + Model color bar row */}
+      <div className="flex items-center gap-1.5 mb-2">
+        {onToggleFavorite && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite(session.id);
+            }}
+            className={`flex-shrink-0 z-10 transition-colors ${
+              isFavorite
+                ? "text-yellow-400"
+                : "text-muted-foreground/40 hover:text-yellow-400"
+            }`}
+            title={isFavorite ? "Remove from favorites" : "Add to favorites"}
+          >
+            <Star className="h-3.5 w-3.5" fill={isFavorite ? "currentColor" : "none"} />
+          </button>
+        )}
+        <div className={`h-1 w-8 rounded-full ${modelColor} opacity-70`} />
+      </div>
 
       {/* Content */}
       <div className="text-xs font-medium truncate leading-tight mb-1 text-foreground/90">

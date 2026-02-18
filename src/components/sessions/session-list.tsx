@@ -165,8 +165,8 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
           onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
           className="h-9 px-3"
         >
-          <Star className={`h-4 w-4 mr-2 ${showFavoritesOnly ? "fill-yellow-400 text-yellow-400" : ""}`} />
-          Favorites {favorites.length > 0 && `(${favorites.length})`}
+          <Star className="h-4 w-4 mr-2" fill={showFavoritesOnly ? "currentColor" : "none"} />
+          Favorites
         </Button>
         <div className="relative flex-1 max-w-md min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -202,43 +202,39 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
         </Select>
       </div>
 
-      {/* Date Range and Model Filters */}
-      <div className="flex gap-3 items-center flex-wrap">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <div className="flex items-center gap-1 border rounded-lg p-0.5">
-            {(["all", "today", "week", "month"] as DateRange[]).map((range) => (
-              <Button
-                key={range}
-                variant={dateRange === range ? "default" : "ghost"}
-                size="sm"
-                className="h-7 px-3 text-xs"
-                onClick={() => setDateRange(range)}
-              >
-                {range === "all" ? "All Time" :
-                 range === "today" ? "Today" :
-                 range === "week" ? "This Week" :
-                 "This Month"}
-              </Button>
-            ))}
-          </div>
+      {/* Date Range and Model Filters — same row */}
+      <div className="flex gap-2 items-center flex-wrap">
+        <div className="flex items-center gap-1 border rounded-lg p-0.5">
+          <Calendar className="h-3.5 w-3.5 text-muted-foreground ml-1.5" />
+          {(["all", "today", "week", "month"] as DateRange[]).map((range) => (
+            <Button
+              key={range}
+              variant={dateRange === range ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setDateRange(range)}
+            >
+              {range === "all" ? "All Time" :
+               range === "today" ? "Today" :
+               range === "week" ? "This Week" :
+               "This Month"}
+            </Button>
+          ))}
         </div>
-        <div className="flex items-center gap-2">
-          <Cpu className="h-4 w-4 text-muted-foreground" />
-          <div className="flex items-center gap-1 border rounded-lg p-0.5">
-            {(["all", "opus", "sonnet", "haiku"] as ModelFilter[]).map((model) => (
-              <Button
-                key={model}
-                variant={modelFilter === model ? "default" : "ghost"}
-                size="sm"
-                className="h-7 px-3 text-xs"
-                onClick={() => setModelFilter(model)}
-              >
-                {model === "all" ? "All Models" :
-                 model.charAt(0).toUpperCase() + model.slice(1)}
-              </Button>
-            ))}
-          </div>
+        <div className="flex items-center gap-1 border rounded-lg p-0.5">
+          <Cpu className="h-3.5 w-3.5 text-muted-foreground ml-1.5" />
+          {(["all", "opus", "sonnet", "haiku"] as ModelFilter[]).map((model) => (
+            <Button
+              key={model}
+              variant={modelFilter === model ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setModelFilter(model)}
+            >
+              {model === "all" ? "All Models" :
+               model.charAt(0).toUpperCase() + model.slice(1)}
+            </Button>
+          ))}
         </div>
         {(dateRange !== "all" || modelFilter !== "all") && (
           <Button
@@ -251,7 +247,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
             }}
           >
             <X className="h-3 w-3 mr-1" />
-            Clear Filters
+            Clear
           </Button>
         )}
       </div>
@@ -298,11 +294,11 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
                     }}
                     className={`flex-shrink-0 transition-colors ${
                       isFavorite(s.id)
-                        ? "text-yellow-400 fill-yellow-400"
+                        ? "text-yellow-400"
                         : "text-muted-foreground hover:text-yellow-400"
                     }`}
                   >
-                    <Star className="h-3.5 w-3.5" />
+                    <Star className="h-3.5 w-3.5" fill={isFavorite(s.id) ? "currentColor" : "none"} />
                   </button>
                   <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${cfg.dot} ${cfg.animation || ""}`} />
                   <div className="flex-1 min-w-0">
