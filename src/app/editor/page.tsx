@@ -130,8 +130,9 @@ export default function EditorPage() {
         setContent("");
         setOriginalContent("");
       }
-    } catch { /* skip */ }
-    finally { setDeleting(false); }
+    } catch {
+      toast("Failed to delete CLAUDE.md", "error");
+    } finally { setDeleting(false); }
   };
 
   // Reload files and select new path

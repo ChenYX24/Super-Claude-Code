@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
+import { shortModel as shortModelUtil } from "@/lib/format-utils";
 
 // ---- Types ----
 
@@ -45,11 +46,7 @@ function fmtTime(ts: string) {
 }
 
 function shortModel(m?: string) {
-  if (!m) return "";
-  if (m.includes("opus")) return "opus";
-  if (m.includes("sonnet")) return "sonnet";
-  if (m.includes("haiku")) return "haiku";
-  return m;
+  return shortModelUtil(m || "");
 }
 
 // Tool color mapping for terminal

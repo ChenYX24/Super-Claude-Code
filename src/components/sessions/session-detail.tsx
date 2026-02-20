@@ -8,8 +8,9 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { TerminalView } from "@/components/terminal-view";
 import {
   RefreshCw, ArrowLeft, Wrench, ChevronsUp, ChevronsDown, MapPin,
-  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download, BarChart3, Star,
+  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download, BarChart3, Star, MessageCircle,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { fmtCost, fmtTokens, shortModel } from "@/lib/format-utils";
 import { ConvMessage } from "./conv-message";
 import { SessionAnalytics } from "./session-analytics";
@@ -41,6 +42,7 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { isFavorite, toggleFavorite } = useFavorites();
+  const router = useRouter();
 
   useEffect(() => {
     setLoading(true);
@@ -214,6 +216,13 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
           )}
           <Button variant={showAnalytics ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => { setShowAnalytics(!showAnalytics); setShowCheckpoints(false); setShowFiles(false); }}>
             <BarChart3 className="h-3 w-3 mr-1" />Analytics
+          </Button>
+          <Button
+            variant="outline" size="sm" className="text-xs h-7"
+            onClick={() => router.push(`/chat?session=${encodeURIComponent(projectPath)}|${sessionId}`)}
+            title="Open in Chat View"
+          >
+            <MessageCircle className="h-3 w-3 mr-1" />Chat
           </Button>
           <Button variant="outline" size="sm" className="text-xs h-7" onClick={exportAsMarkdown} title="Export as Markdown">
             <Download className="h-3 w-3 mr-1" />Export

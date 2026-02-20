@@ -29,9 +29,6 @@ export interface SessionsData {
   recentSessions: SessionInfo[];
 }
 
-/** Raw content block from API/JSONL (e.g. text, thinking, tool_use). Pass-through required for last assistant message when calling Anthropic API. */
-export type RawContentBlock = { type: string; text?: string; thinking?: string; [k: string]: unknown };
-
 export interface SessionMessage {
   uuid: string;
   role: "user" | "assistant" | "system";
@@ -44,8 +41,6 @@ export interface SessionMessage {
   outputTokens?: number;
   cacheRead?: number;
   thinkingContent?: string;
-  /** Original content array from JSONL/API. Keep unchanged when sending last assistant message to Anthropic (thinking/redacted_thinking must not be modified). */
-  rawContent?: RawContentBlock[];
   isCheckpoint?: boolean;
 }
 

@@ -116,7 +116,7 @@ export function SidebarNav() {
         </nav>
         <div className="flex items-center justify-between pt-4 border-t">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">v0.5.0</span>
+            <span className="text-xs text-muted-foreground">v1.0.0</span>
             <Button
               variant="ghost"
               size="sm"

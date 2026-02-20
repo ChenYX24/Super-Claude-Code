@@ -315,7 +315,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
                     <Badge variant="outline" className="text-xs font-mono">
                       <DollarSign className="h-3 w-3 mr-0.5" />{fmtCost(s.estimatedCost)}
                     </Badge>
-                    <Badge variant="outline" className="text-xs">{s.messageCount} lines</Badge>
+                    <Badge variant="outline" className="text-xs">{s.messageCount} msgs</Badge>
                   </div>
                 </CardContent>
               </Card>

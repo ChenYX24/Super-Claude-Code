@@ -710,7 +710,7 @@ function HookDialog({ open, onClose, mode, hook, onSuccess }: HookDialogProps) {
   const [hookType, setHookType] = useState(hook?.type || "PreToolUse");
   const [matcher, setMatcher] = useState(hook?.matcher || "");
   const [command, setCommand] = useState(hook?.command || "");
-  const [timeout, setTimeout] = useState<string>(hook?.timeout?.toString() || "");
+  const [hookTimeout, setHookTimeout] = useState<string>(hook?.timeout?.toString() || "");
   const [description, setDescription] = useState(hook?.description || "");
   const [submitting, setSubmitting] = useState(false);
 
@@ -719,7 +719,7 @@ function HookDialog({ open, onClose, mode, hook, onSuccess }: HookDialogProps) {
       setHookType(hook?.type || "PreToolUse");
       setMatcher(hook?.matcher || "");
       setCommand(hook?.command || "");
-      setTimeout(hook?.timeout?.toString() || "");
+      setHookTimeout(hook?.timeout?.toString() || "");
       setDescription(hook?.description || "");
     }
   }, [open, hook]);
@@ -740,7 +740,7 @@ function HookDialog({ open, onClose, mode, hook, onSuccess }: HookDialogProps) {
     };
 
     if (matcher.trim()) requestBody.matcher = matcher.trim();
-    if (timeout.trim()) requestBody.timeout = parseInt(timeout);
+    if (hookTimeout.trim()) requestBody.timeout = parseInt(hookTimeout);
     if (description.trim()) requestBody.description = description.trim();
 
     if (mode === "edit" && hook) {
@@ -836,8 +836,8 @@ function HookDialog({ open, onClose, mode, hook, onSuccess }: HookDialogProps) {
               type="number"
               className="w-full px-3 py-2 border rounded-md text-sm bg-background"
               placeholder="30"
-              value={timeout}
-              onChange={(e) => setTimeout(e.target.value)}
+              value={hookTimeout}
+              onChange={(e) => setHookTimeout(e.target.value)}
             />
           </div>
 

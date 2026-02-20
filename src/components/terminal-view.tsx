@@ -7,44 +7,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
-// ---- Types ----
-
-interface SessionMessage {
-  uuid: string;
-  role: "user" | "assistant" | "system";
-  type: string;
-  content: string;
-  timestamp: string;
-  model?: string;
-  toolUse?: { name: string; input?: string }[];
-  inputTokens?: number;
-  outputTokens?: number;
-  cacheRead?: number;
-  thinkingContent?: string;
-  isCheckpoint?: boolean;
-}
-
-interface Checkpoint {
-  index: number;
-  content: string;
-  timestamp: string;
-}
-
-interface SessionDetail {
-  id: string;
-  project: string;
-  projectName: string;
-  messages: SessionMessage[];
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  cacheReadTokens: number;
-  estimatedCost: number;
-  model?: string;
-  startTime: string;
-  endTime: string;
-  checkpoints?: Checkpoint[];
-}
+import { fmtTokens } from "@/lib/format-utils";
+import type { SessionDetail } from "@/components/sessions/types";
 
 // ---- Terminal View ----
 
@@ -140,12 +104,6 @@ export function TerminalView({ detail }: { detail: SessionDetail }) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }),
     []
   );
-
-  const fmtTokens = (n: number) => {
-    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
-    if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
-    return n.toString();
-  };
 
   return (
     <div className="flex flex-col h-full bg-zinc-900 text-zinc-300 rounded-lg overflow-hidden border border-zinc-800">

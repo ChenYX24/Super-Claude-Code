@@ -54,8 +54,11 @@ export function SessionBlock({ session, onClick, searchQuery, isFavorite, onTogg
   const modelColor = MODEL_COLORS[model] || "bg-zinc-500";
 
   return (
-    <button
+    <div
       onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
       className={`
         relative group rounded-lg border p-3 text-left transition-all duration-200
         hover:scale-[1.03] hover:shadow-md cursor-pointer
@@ -126,7 +129,7 @@ export function SessionBlock({ session, onClick, searchQuery, isFavorite, onTogg
           </div>
         </div>
       </div>
-    </button>
+    </div>
   );
 }
 
