@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,11 @@ import {
   EyeOff,
   ChevronDown,
   ChevronRight,
+  Play,
+  Square,
+  Shield,
+  Radio,
+  Globe,
 } from "lucide-react";
 
 interface BotStatus {
@@ -26,11 +31,23 @@ interface BotStatus {
   error?: string;
 }
 
+interface PollingStatus {
+  polling: boolean;
+  uptime: number | null;
+}
+
+interface ApprovalStatus {
+  available: boolean;
+  chatId: string | null;
+}
+
 interface EnvVar {
   value: string;
   masked: string;
   source: "env.local" | "process";
 }
+
+type BotMode = "polling" | "webhook";
 
 export function TelegramSettings() {
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
@@ -49,16 +66,39 @@ export function TelegramSettings() {
   const [showToken, setShowToken] = useState(false);
   const [savingEnv, setSavingEnv] = useState(false);
 
-  // Load bot status + auto-fill webhook from SCC_BASE_URL
+  // Polling state
+  const [botMode, setBotMode] = useState<BotMode>("webhook");
+  const [pollingStatus, setPollingStatus] = useState<PollingStatus>({ polling: false, uptime: null });
+  const [pollingLoading, setPollingLoading] = useState(false);
+
+  // Approval state
+  const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus>({ available: false, chatId: null });
+
+  const fetchPollingStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/bot/telegram/polling");
+      if (res.ok) {
+        const data = await res.json();
+        setPollingStatus(data);
+        if (data.polling) setBotMode("polling");
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  // Load bot status + env + polling + approval
   useEffect(() => {
-    const loadBotAndEnv = async () => {
+    const loadAll = async () => {
       try {
-        const [botRes, envRes] = await Promise.all([
+        const [botRes, envRes, approvalRes] = await Promise.all([
           fetch("/api/bot/telegram/setup").then((r) => r.json()),
           fetch("/api/env").then((r) => r.json()),
+          fetch("/api/bot/telegram/approval").then((r) => r.json()).catch(() => ({ available: false, chatId: null })),
         ]);
 
         setBotStatus(botRes);
+        setApprovalStatus(approvalRes);
         const vars = envRes.vars || {};
         setEnvVars(vars);
 
@@ -73,14 +113,24 @@ export function TelegramSettings() {
           setWebhookUrl(presetUrl);
           setWebhookAutoFilled(true);
         }
+
+        // Fetch polling status
+        await fetchPollingStatus();
       } catch {
         setBotStatus({ configured: false, url: null, error: "Failed to connect" });
       } finally {
         setBotLoading(false);
       }
     };
-    loadBotAndEnv();
-  }, []);
+    loadAll();
+  }, [fetchPollingStatus]);
+
+  // Poll for polling status updates when in polling mode
+  useEffect(() => {
+    if (botMode !== "polling") return;
+    const interval = setInterval(fetchPollingStatus, 10_000);
+    return () => clearInterval(interval);
+  }, [botMode, fetchPollingStatus]);
 
   const handleSetWebhook = async () => {
     if (!webhookUrl.trim()) {
@@ -169,6 +219,40 @@ export function TelegramSettings() {
     }
   };
 
+  const handlePollingToggle = async () => {
+    setPollingLoading(true);
+    const action = pollingStatus.polling ? "stop" : "start";
+    try {
+      const res = await fetch("/api/bot/telegram/polling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast(`Polling ${action === "start" ? "started" : "stopped"}`, "success");
+        await fetchPollingStatus();
+      } else {
+        toast(data.error || `Failed to ${action} polling`, "error");
+      }
+    } catch {
+      toast(`Failed to ${action} polling`, "error");
+    } finally {
+      setPollingLoading(false);
+    }
+  };
+
+  const formatUptime = (ms: number | null): string => {
+    if (ms === null) return "-";
+    const seconds = Math.floor(ms / 1000);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
+  };
+
   const isTokenConfigured = !!envVars.TELEGRAM_BOT_TOKEN || botStatus?.error !== "TELEGRAM_BOT_TOKEN not configured";
 
   return (
@@ -179,7 +263,7 @@ export function TelegramSettings() {
           Telegram Bot
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Connect a Telegram bot for remote session management and chat.
+          Connect a Telegram bot for remote session management, chat, and permission approval.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -251,67 +335,172 @@ export function TelegramSettings() {
                 <CheckCircle className="h-3 w-3 mr-1" />
                 Token Configured
               </Badge>
-              {botStatus?.configured && botStatus.url && (
+              {pollingStatus.polling && (
                 <Badge variant="default">
-                  <CheckCircle className="h-3 w-3 mr-1" />
+                  <Radio className="h-3 w-3 mr-1" />
+                  Polling Active
+                </Badge>
+              )}
+              {!pollingStatus.polling && botStatus?.configured && botStatus.url && (
+                <Badge variant="default">
+                  <Globe className="h-3 w-3 mr-1" />
                   Webhook Active
                 </Badge>
               )}
             </div>
 
-            {botStatus?.url && (
-              <div className="bg-muted/50 rounded-md p-3 space-y-1">
-                <div className="text-xs font-medium">Current Webhook</div>
-                <code className="text-xs break-all">{botStatus.url}</code>
-                {botStatus.pendingUpdateCount !== undefined &&
-                  botStatus.pendingUpdateCount > 0 && (
-                    <div className="text-xs text-amber-600 mt-1">
-                      {botStatus.pendingUpdateCount} pending update(s)
+            {/* Mode Selector */}
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Bot Mode</div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBotMode("polling")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                    botMode === "polling"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <Radio className="h-3.5 w-3.5" />
+                  Polling
+                </button>
+                <button
+                  onClick={() => setBotMode("webhook")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border transition-colors ${
+                    botMode === "webhook"
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border hover:bg-muted/50"
+                  }`}
+                >
+                  <Globe className="h-3.5 w-3.5" />
+                  Webhook
+                </button>
+              </div>
+            </div>
+
+            {/* Polling Mode */}
+            {botMode === "polling" && (
+              <div className="space-y-3 bg-muted/30 rounded-md p-3">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">Long Polling</div>
+                    <div className="text-xs text-muted-foreground">
+                      No public URL needed. Bot polls Telegram for updates.
                     </div>
-                  )}
-                {botStatus.lastErrorMessage && (
-                  <div className="text-xs text-red-500 mt-1">
-                    Last error: {botStatus.lastErrorMessage}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={pollingStatus.polling ? "destructive" : "default"}
+                    onClick={handlePollingToggle}
+                    disabled={pollingLoading}
+                  >
+                    {pollingLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                    ) : pollingStatus.polling ? (
+                      <Square className="h-3.5 w-3.5 mr-1" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {pollingStatus.polling ? "Stop" : "Start"}
+                  </Button>
+                </div>
+                {pollingStatus.polling && (
+                  <div className="text-xs text-muted-foreground">
+                    Uptime: {formatUptime(pollingStatus.uptime)}
                   </div>
                 )}
               </div>
             )}
 
-            {/* Set/Update Webhook */}
-            <div className="space-y-2">
-              <div className="text-sm font-medium">
-                {botStatus?.url ? "Update" : "Set"} Webhook URL
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={webhookUrl}
-                  onChange={(e) => {
-                    setWebhookUrl(e.target.value);
-                    setWebhookAutoFilled(false);
-                  }}
-                  className="flex-1 px-3 py-1.5 text-sm font-mono border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="https://your-domain.com/api/bot/telegram"
-                />
-                <Button
-                  size="sm"
-                  onClick={handleSetWebhook}
-                  disabled={settingWebhook || !webhookUrl.trim()}
-                >
-                  {settingWebhook ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Setting...
-                    </>
-                  ) : (
-                    "Set Webhook"
+            {/* Webhook Mode */}
+            {botMode === "webhook" && (
+              <div className="space-y-3">
+                {botStatus?.url && (
+                  <div className="bg-muted/50 rounded-md p-3 space-y-1">
+                    <div className="text-xs font-medium">Current Webhook</div>
+                    <code className="text-xs break-all">{botStatus.url}</code>
+                    {botStatus.pendingUpdateCount !== undefined &&
+                      botStatus.pendingUpdateCount > 0 && (
+                        <div className="text-xs text-amber-600 mt-1">
+                          {botStatus.pendingUpdateCount} pending update(s)
+                        </div>
+                      )}
+                    {botStatus.lastErrorMessage && (
+                      <div className="text-xs text-red-500 mt-1">
+                        Last error: {botStatus.lastErrorMessage}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Set/Update Webhook */}
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">
+                    {botStatus?.url ? "Update" : "Set"} Webhook URL
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={webhookUrl}
+                      onChange={(e) => {
+                        setWebhookUrl(e.target.value);
+                        setWebhookAutoFilled(false);
+                      }}
+                      className="flex-1 px-3 py-1.5 text-sm font-mono border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="https://your-domain.com/api/bot/telegram"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleSetWebhook}
+                      disabled={settingWebhook || !webhookUrl.trim()}
+                    >
+                      {settingWebhook ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Setting...
+                        </>
+                      ) : (
+                        "Set Webhook"
+                      )}
+                    </Button>
+                  </div>
+                  {webhookAutoFilled && (
+                    <div className="text-xs text-muted-foreground">
+                      Auto-filled from SCC_BASE_URL
+                    </div>
                   )}
-                </Button>
-              </div>
-              {webhookAutoFilled && (
-                <div className="text-xs text-muted-foreground">
-                  Auto-filled from SCC_BASE_URL
                 </div>
-              )}
+              </div>
+            )}
+
+            {/* Approval Endpoint */}
+            <div className="space-y-2 bg-muted/30 rounded-md p-3">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Permission Approval</span>
+                {approvalStatus.available ? (
+                  <Badge variant="default">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Ready
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Unavailable
+                  </Badge>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>Claude Code tool permissions are forwarded to Telegram for approval.</p>
+                <p>
+                  Endpoint:{" "}
+                  <code className="bg-muted px-1 rounded">
+                    http://localhost:3000/api/bot/telegram/approval
+                  </code>
+                </p>
+                {approvalStatus.chatId && (
+                  <p>Approval chat: <code className="bg-muted px-1 rounded">{approvalStatus.chatId}</code></p>
+                )}
+              </div>
             </div>
 
             {/* Test Connection */}
@@ -319,7 +508,7 @@ export function TelegramSettings() {
               variant="outline"
               size="sm"
               onClick={handleTestConnection}
-              disabled={testingSend || !botStatus?.configured}
+              disabled={testingSend}
             >
               {testingSend ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
@@ -355,10 +544,16 @@ export function TelegramSettings() {
               <ol className="list-decimal list-inside space-y-1.5">
                 <li>Create a bot via <code className="bg-muted px-1 rounded">@BotFather</code> on Telegram</li>
                 <li>Copy the bot token and paste it above</li>
-                <li>Set webhook URL to <code className="bg-muted px-1 rounded">https://your-domain/api/bot/telegram</code></li>
                 <li>Get your chat ID by messaging <code className="bg-muted px-1 rounded">@userinfobot</code></li>
                 <li>Add chat ID above (optional, leave empty to allow all)</li>
                 <li>Save to .env.local and restart the server</li>
+                <li>
+                  Choose mode:
+                  <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                    <li><strong>Polling</strong> — Click Start. No public URL needed.</li>
+                    <li><strong>Webhook</strong> — Set URL to <code className="bg-muted px-1 rounded">https://your-domain/api/bot/telegram</code></li>
+                  </ul>
+                </li>
                 <li>Click &quot;Test Connection&quot; to verify</li>
               </ol>
             </div>
