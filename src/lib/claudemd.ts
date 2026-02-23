@@ -242,30 +242,39 @@ export function listProjectOptions(): ProjectOption[] {
 /**
  * 为项目创建 CLAUDE.md（在实际项目目录或 ~/.claude/projects/{project}/ 下）
  */
-export function createClaudeMd(projectEncoded: string): { success: boolean; path: string; error?: string } {
+export function createClaudeMd(projectEncoded: string, fileName: string = "CLAUDE.md"): { success: boolean; path: string; error?: string } {
+  if (!INSTRUCTION_FILES.has(fileName)) {
+    return { success: false, path: "", error: "Invalid file name" };
+  }
+
   if (projectEncoded === "__global__") {
-    const globalPath = path.join(CLAUDE_DIR, "CLAUDE.md");
+    // Global: CLAUDE.md → ~/.claude/, AGENTS.md → ~/.codex/
+    const globalDir = fileName === "AGENTS.md" ? CODEX_DIR : CLAUDE_DIR;
+    const globalPath = path.join(globalDir, fileName);
     if (fs.existsSync(globalPath)) {
-      return { success: false, path: globalPath, error: "Global CLAUDE.md already exists" };
+      return { success: false, path: globalPath, error: `Global ${fileName} already exists` };
+    }
+    if (!fs.existsSync(globalDir)) {
+      fs.mkdirSync(globalDir, { recursive: true });
     }
     const ok = writeClaudeMdContent(globalPath, "# Global Instructions\n\n");
     return { success: ok, path: globalPath };
   }
 
   const decoded = decodeProjectPath(projectEncoded);
-  const realClaudeMd = path.join(decoded, "CLAUDE.md");
-  const projectClaudeMd = path.join(PROJECTS_DIR, projectEncoded, "CLAUDE.md");
+  const realFile = path.join(decoded, fileName);
+  const projectFile = path.join(PROJECTS_DIR, projectEncoded, fileName);
 
   // 优先在实际项目目录创建
-  let targetPath = projectClaudeMd;
+  let targetPath = projectFile;
   try {
     if (fs.existsSync(decoded) && fs.statSync(decoded).isDirectory()) {
-      targetPath = realClaudeMd;
+      targetPath = realFile;
     }
   } catch { /* fallback to project dir */ }
 
   if (fs.existsSync(targetPath)) {
-    return { success: false, path: targetPath, error: "CLAUDE.md already exists" };
+    return { success: false, path: targetPath, error: `${fileName} already exists` };
   }
 
   const template = `# ${decoded}\n\n## Project Instructions\n\n`;
@@ -311,11 +320,15 @@ export function registerClaudeMdFile(filePath: string): { success: boolean; erro
 /**
  * 在任意路径下创建 CLAUDE.md
  */
-export function createClaudeMdAtPath(dirPath: string): { success: boolean; path: string; error?: string } {
-  const targetPath = path.join(dirPath, "CLAUDE.md");
+export function createClaudeMdAtPath(dirPath: string, fileName: string = "CLAUDE.md"): { success: boolean; path: string; error?: string } {
+  if (!INSTRUCTION_FILES.has(fileName)) {
+    return { success: false, path: "", error: "Invalid file name" };
+  }
+
+  const targetPath = path.join(dirPath, fileName);
 
   if (fs.existsSync(targetPath)) {
-    return { success: false, path: targetPath, error: "CLAUDE.md already exists at this path" };
+    return { success: false, path: targetPath, error: `${fileName} already exists at this path` };
   }
 
   // Verify directory exists

@@ -44,7 +44,8 @@ export async function DELETE(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { projectEncoded, customPath } = body;
+    const { projectEncoded, customPath, fileName } = body;
+    const targetFile = fileName === "AGENTS.md" ? "AGENTS.md" : "CLAUDE.md";
 
     if (!projectEncoded && !customPath) {
       return NextResponse.json(
@@ -54,8 +55,8 @@ export async function POST(request: NextRequest) {
     }
 
     const result = customPath
-      ? createClaudeMdAtPath(customPath)
-      : createClaudeMd(projectEncoded);
+      ? createClaudeMdAtPath(customPath, targetFile)
+      : createClaudeMd(projectEncoded, targetFile);
     if (!result.success) {
       return NextResponse.json(
         { error: result.error || "Failed to create", path: result.path },

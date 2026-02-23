@@ -131,8 +131,15 @@ function ChatPageContent() {
   useEffect(() => {
     if (!selectedSessionKey) return;
     setChatMode("session");
+    setCompareMode(false); // Exit compare mode when viewing a session
     clearMessages();
     setClaudeSessionId("");
+
+    // Auto-set provider based on session's provider
+    const isCodexSession = selectedSessionKey.startsWith("__codex__|");
+    const sessionProvider = isCodexSession ? "codex" : "claude";
+    setChatProvider(sessionProvider);
+    localStorage.setItem("chat-provider", sessionProvider);
 
     const fetchDetail = async () => {
       setLoading(true);
@@ -621,7 +628,7 @@ function ChatPageContent() {
         )}
 
         {/* Split view (compare mode) */}
-        {compareMode && chatMode === "chat" && (
+        {compareMode && (
           <SplitView
             leftProvider={chatProvider}
             rightProvider={compareRightProvider}
@@ -769,7 +776,10 @@ function ChatPageContent() {
           provider={chatProvider}
           onProviderChange={(p) => { setChatProvider(p); localStorage.setItem("chat-provider", p); }}
           compareMode={compareMode}
-          onCompareModeChange={setCompareMode}
+          onCompareModeChange={(enabled) => {
+            setCompareMode(enabled);
+            if (enabled) setChatMode("chat");
+          }}
           disabled={chatSending}
         />
 

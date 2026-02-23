@@ -49,6 +49,8 @@ export default function EditorPage() {
   // Custom path state
   const [customPath, setCustomPath] = useState<string>("");
   const [createError, setCreateError] = useState<string>("");
+  // File type selector for create dialog
+  const [createFileName, setCreateFileName] = useState<"CLAUDE.md" | "AGENTS.md">("CLAUDE.md");
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
@@ -97,14 +99,14 @@ export default function EditorPage() {
         setOriginalContent(content);
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
-        toast("CLAUDE.md saved successfully");
+        toast("File saved successfully");
       } else {
         setSaveStatus("error");
-        toast("Failed to save CLAUDE.md", "error");
+        toast("Failed to save file", "error");
       }
     } catch {
       setSaveStatus("error");
-      toast("Failed to save CLAUDE.md", "error");
+      toast("Failed to save file", "error");
     }
     finally { setSaving(false); }
   }, [selectedFile, content, toast]);
@@ -131,7 +133,7 @@ export default function EditorPage() {
         setOriginalContent("");
       }
     } catch {
-      toast("Failed to delete CLAUDE.md", "error");
+      toast("Failed to delete file", "error");
     } finally { setDeleting(false); }
   };
 
@@ -176,7 +178,7 @@ export default function EditorPage() {
       const res = await fetch("/api/claudemd", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectEncoded }),
+        body: JSON.stringify({ projectEncoded, fileName: createFileName }),
       });
       const data = await res.json();
       if (res.ok && data.path) {
@@ -197,7 +199,7 @@ export default function EditorPage() {
       const res = await fetch("/api/claudemd", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customPath: dirPath.trim() }),
+        body: JSON.stringify({ customPath: dirPath.trim(), fileName: createFileName }),
       });
       const data = await res.json();
       if (res.ok && data.path) {
@@ -316,11 +318,21 @@ export default function EditorPage() {
                 <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
                   <span className="text-sm font-medium flex items-center gap-1.5">
                     <FolderPlus className="h-4 w-4" />
-                    Create CLAUDE.md
+                    Create
                   </span>
-                  <button onClick={() => setShowCreateDialog(false)}>
-                    <X className="h-4 w-4 text-muted-foreground" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={createFileName}
+                      onChange={(e) => setCreateFileName(e.target.value as "CLAUDE.md" | "AGENTS.md")}
+                      className="text-xs bg-background border rounded px-1.5 py-0.5 cursor-pointer"
+                    >
+                      <option value="CLAUDE.md">CLAUDE.md</option>
+                      <option value="AGENTS.md">AGENTS.md</option>
+                    </select>
+                    <button onClick={() => setShowCreateDialog(false)}>
+                      <X className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Tabs */}
@@ -358,7 +370,7 @@ export default function EditorPage() {
                   {createTab === "projects" && (
                     creatableProjects.length === 0 ? (
                       <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                        All projects already have CLAUDE.md
+                        All projects already have {createFileName}
                       </div>
                     ) : (
                       creatableProjects.map((project) => (
@@ -488,7 +500,7 @@ export default function EditorPage() {
                     <div className="p-3 space-y-3">
                       <div>
                         <label className="text-xs text-muted-foreground mb-1 block">
-                          Directory path (CLAUDE.md will be created inside):
+                          Directory path ({createFileName} will be created inside):
                         </label>
                         <input
                           type="text"
@@ -509,7 +521,7 @@ export default function EditorPage() {
                         className="w-full"
                       >
                         <FolderPlus className="h-4 w-4 mr-1" />
-                        {creating ? "Creating..." : "Create CLAUDE.md"}
+                        {creating ? "Creating..." : `Create ${createFileName}`}
                       </Button>
                     </div>
                   )}
