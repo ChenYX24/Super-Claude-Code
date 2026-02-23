@@ -1,0 +1,146 @@
+{
+  "nav": {
+    "overview": "Overview",
+    "teamBoard": "Team Board",
+    "sessions": "Sessions",
+    "chat": "Chat",
+    "tokens": "Tokens",
+    "toolbox": "Toolbox",
+    "queue": "Queue",
+    "instructions": "Instructions",
+    "settings": "Settings"
+  },
+  "settings": {
+    "title": "Settings",
+    "save": "Save",
+    "saving": "Saving...",
+    "unsavedChanges": "Unsaved changes",
+    "savedSuccess": "Settings saved successfully",
+    "savedError": "Failed to save settings",
+    "tabs": {
+      "general": "General",
+      "bots": "Bots",
+      "advanced": "Advanced"
+    },
+    "general": {
+      "title": "General",
+      "description": "Core Claude Code configuration including model, theme, and behavior settings.",
+      "defaultModel": "Default Model",
+      "defaultModelDesc": "The AI model used for new sessions",
+      "theme": "Theme",
+      "themeDesc": "Dashboard appearance mode",
+      "autoUpdate": "Auto Update",
+      "autoUpdateDesc": "Automatically update Claude Code when new versions are available",
+      "extendedThinking": "Extended Thinking",
+      "extendedThinkingDesc": "Enable deep reasoning mode for complex tasks",
+      "language": "Language",
+      "languageDesc": "Dashboard display language"
+    },
+    "costAlerts": {
+      "title": "Cost Alerts",
+      "description": "Set budget limits to receive notifications when costs exceed thresholds. Set to 0 to disable.",
+      "dailyBudget": "Daily Budget",
+      "dailyBudgetDesc": "Maximum spend per day before alerting",
+      "weeklyBudget": "Weekly Budget",
+      "weeklyBudgetDesc": "Maximum spend per week before alerting",
+      "perDay": "per day",
+      "perWeek": "per week",
+      "disabled": "(disabled)",
+      "alertsEnabled": "Alerts enabled",
+      "alertsEnabledDesc": "You'll receive notifications when costs exceed your budget limits. Checks run every 60 seconds."
+    },
+    "permissions": {
+      "title": "Permissions",
+      "description": "Tool access controls and auto-approval settings.",
+      "autoApprove": "Auto Approve Tools",
+      "allowedTools": "Allowed Tools",
+      "deniedTools": "Denied Tools",
+      "allToolsAllowed": "All tools allowed (default)"
+    },
+    "hooks": {
+      "title": "Hooks",
+      "description": "Shell commands that execute in response to tool lifecycle events.",
+      "preToolUse": "PreToolUse Hook",
+      "postToolUse": "PostToolUse Hook",
+      "stop": "Stop Hook",
+      "notConfigured": "Not Configured",
+      "configured": "Configured"
+    },
+    "telegram": {
+      "title": "Telegram Bot",
+      "description": "Connect a Telegram bot for remote session management and chat.",
+      "notConfigured": "Not Configured",
+      "setEnvVar": "Set {var} environment variable to enable the bot.",
+      "tokenConfigured": "Token Configured",
+      "webhookActive": "Webhook Active",
+      "currentWebhook": "Current Webhook",
+      "pendingUpdates": "{count} pending update(s)",
+      "lastError": "Last error: {error}",
+      "setWebhookUrl": "Set Webhook URL",
+      "updateWebhookUrl": "Update Webhook URL",
+      "setWebhook": "Set Webhook",
+      "setting": "Setting...",
+      "testConnection": "Test Connection",
+      "supportedCommands": "Supported Commands",
+      "checkingStatus": "Checking bot status..."
+    },
+    "codex": {
+      "title": "Codex CLI",
+      "description": "OpenAI Codex CLI configuration and trusted projects.",
+      "installed": "Installed",
+      "notInstalled": "Not Installed",
+      "installHint": "Install Codex CLI to enable Codex integration",
+      "sandbox": "Sandbox",
+      "trustedProjects": "Trusted Projects"
+    },
+    "environment": {
+      "title": "Environment",
+      "description": "System information and runtime environment details.",
+      "platform": "Platform",
+      "nodeVersion": "Node Version",
+      "homeDir": "Home Directory",
+      "claudeDir": "Claude Directory",
+      "codexInstalled": "Codex Installed",
+      "apiKeyConfigured": "API Key Configured",
+      "apiKey": "API Key",
+      "proxy": "Proxy"
+    },
+    "rawConfig": {
+      "viewRaw": "View Raw Configuration",
+      "global": "Global (~/.claude/settings.json)",
+      "local": "Local (~/.claude/settings.local.json)",
+      "codex": "Codex (~/.codex/config.toml)"
+    }
+  },
+  "queue": {
+    "title": "Queue",
+    "workerActive": "Worker Active",
+    "clearCompleted": "Clear Completed",
+    "autoRefresh": "Auto",
+    "manualRefresh": "Manual",
+    "total": "Total",
+    "pending": "Pending",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "allSessions": "All Sessions",
+    "noSessions": "No queued sessions yet.",
+    "noSessionsHint": "Use /bg in Telegram or the Queue button in Chat to add tasks.",
+    "columns": {
+      "id": "#",
+      "prompt": "Prompt",
+      "provider": "Provider",
+      "status": "Status",
+      "created": "Created",
+      "duration": "Duration",
+      "actions": "Actions"
+    }
+  },
+  "common": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "loading": "Loading..."
+  }
+}

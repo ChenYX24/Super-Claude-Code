@@ -10,6 +10,7 @@ import {
   enqueueSession,
   listSessions,
   getQueueStats,
+  clearCompleted,
   startWorker,
   isWorkerRunning,
 } from "@/lib/bot/session-queue";
@@ -74,4 +75,16 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function DELETE(req: NextRequest) {
+  const url = new URL(req.url);
+  const action = url.searchParams.get("action");
+
+  if (action === "clear-completed") {
+    const count = clearCompleted();
+    return NextResponse.json({ success: true, count });
+  }
+
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }

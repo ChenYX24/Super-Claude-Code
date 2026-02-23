@@ -182,11 +182,10 @@ export async function POST(req: NextRequest) {
               safeEnqueue(`data: ${JSON.stringify(event.raw)}\n\n`);
             }
           }
-          // If CLI exited with error, send stderr or exit code as error event
-          if (code !== 0 && stderrBuffer) {
-            safeEnqueue(`data: ${JSON.stringify({ type: "error", error: stderrBuffer })}\n\n`);
-          } else if (code !== 0 && !hasOutput) {
-            safeEnqueue(`data: ${JSON.stringify({ type: "error", error: `CLI exited with code ${code}` })}\n\n`);
+          // If CLI exited with error, always send error event
+          if (code !== 0) {
+            const errorMsg = stderrBuffer || `CLI exited with code ${code}`;
+            safeEnqueue(`data: ${JSON.stringify({ type: "error", error: errorMsg })}\n\n`);
           } else if (code === 0 && !hasOutput) {
             // CLI exited OK but produced no parseable output — likely a resume issue
             const hint = stderrBuffer ? stderrBuffer : "CLI produced no output. The session may not be resumable.";

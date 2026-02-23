@@ -59,16 +59,32 @@ export async function fetchStatus(baseUrl: string): Promise<BotStatusInfo> {
   }
 }
 
-/** Send a chat message to Claude via dashboard API and collect streamed response */
-export async function chatWithClaude(baseUrl: string, message: string): Promise<{ content: string; model?: string }> {
+/** Parse provider prefix from message text. E.g. "codex: question" → { provider: "codex", message: "question" } */
+export function parseProviderPrefix(text: string): { provider?: string; message: string } {
+  const match = text.match(/^(claude|codex):\s*/i);
+  if (match) {
+    return { provider: match[1].toLowerCase(), message: text.slice(match[0].length) };
+  }
+  return { message: text };
+}
+
+/** Send a chat message to a provider via dashboard API and collect streamed response */
+export async function chatWithProvider(baseUrl: string, message: string, provider?: string, timeoutMs = 30000): Promise<{ content: string; model?: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
+    const body: Record<string, unknown> = {
+      message,
+      permissionMode: "plan",
+    };
+    if (provider) body.provider = provider;
+
     const res = await fetch(`${baseUrl}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        message,
-        permissionMode: "plan",
-      }),
+      body: JSON.stringify(body),
+      signal: controller.signal,
     });
 
     if (!res.ok) {
@@ -120,6 +136,14 @@ export async function chatWithClaude(baseUrl: string, message: string): Promise<
 
     return { content, model };
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Chat timed out after ${Math.round(timeoutMs / 1000)}s`);
+    }
     throw new Error(err instanceof Error ? err.message : "Chat request failed");
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
+
+/** Backward-compatible alias */
+export const chatWithClaude = chatWithProvider;

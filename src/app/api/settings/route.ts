@@ -22,7 +22,7 @@ export async function PUT(req: NextRequest) {
     const body = await req.json();
 
     // Only allow safe fields to be edited
-    const ALLOWED_FIELDS = ["defaultModel", "theme", "autoUpdate", "alwaysThinkingEnabled"];
+    const ALLOWED_FIELDS = ["defaultModel", "codexDefaultModel", "theme", "autoUpdate", "alwaysThinkingEnabled"];
 
     // Read current settings.json
     const settingsPath = path.join(os.homedir(), ".claude", "settings.json");

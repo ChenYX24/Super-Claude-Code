@@ -18,6 +18,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Puzzle,
+  ListOrdered,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -25,21 +26,24 @@ import { Button } from "@/components/ui/button";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { ShortcutsHelp } from "@/components/shortcuts-help";
 import { usePluginSidebarItems } from "@/hooks/use-plugins";
+import { useTranslations } from "next-intl";
 import type { LucideIcon } from "lucide-react";
 
 const navItems = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/team", label: "Team Board", icon: Users },
-  { href: "/sessions", label: "Sessions", icon: Clock },
-  { href: "/chat", label: "Chat", icon: MessageCircle },
-  { href: "/tokens", label: "Tokens", icon: Coins },
-  { href: "/toolbox", label: "Toolbox", icon: Wrench },
-  { href: "/editor", label: "Instructions", icon: FileEdit },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/", labelKey: "overview", icon: LayoutDashboard },
+  { href: "/team", labelKey: "teamBoard", icon: Users },
+  { href: "/sessions", labelKey: "sessions", icon: Clock },
+  { href: "/chat", labelKey: "chat", icon: MessageCircle },
+  { href: "/tokens", labelKey: "tokens", icon: Coins },
+  { href: "/toolbox", labelKey: "toolbox", icon: Wrench },
+  { href: "/queue", labelKey: "queue", icon: ListOrdered },
+  { href: "/editor", labelKey: "instructions", icon: FileEdit },
+  { href: "/settings", labelKey: "settings", icon: Settings },
 ];
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const touchStartXRef = useRef<number | null>(null);
@@ -179,6 +183,7 @@ export function SidebarNav() {
           z-40
           ${collapsed ? "lg:w-14" : "lg:w-56"}
           w-64 max-w-[85vw]
+          h-dvh
           border-r
           bg-background
           ${collapsed ? "lg:px-2 lg:py-4 px-4 py-4" : "p-4"}
@@ -213,15 +218,16 @@ export function SidebarNav() {
         </div>
 
         {/* Navigation */}
-        <nav className="space-y-1 flex-1">
+        <nav className="space-y-1 flex-1 overflow-y-auto min-h-0">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
+            const label = t(item.labelKey);
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setIsOpen(false)}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? label : undefined}
                 className={`
                   flex items-center ${collapsed ? "lg:justify-center" : "gap-3"} gap-3
                   ${collapsed ? "lg:px-0 lg:py-2 px-3 py-3" : "px-3 py-3"}
@@ -236,7 +242,7 @@ export function SidebarNav() {
                 `}
               >
                 <item.icon className="h-5 w-5 flex-shrink-0 lg:h-4 lg:w-4" />
-                <span className={collapsed ? "lg:hidden" : ""}>{item.label}</span>
+                <span className={collapsed ? "lg:hidden" : ""}>{label}</span>
               </Link>
             );
           })}

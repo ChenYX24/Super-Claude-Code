@@ -1,0 +1,146 @@
+{
+  "nav": {
+    "overview": "概览",
+    "teamBoard": "团队面板",
+    "sessions": "会话",
+    "chat": "聊天",
+    "tokens": "Token",
+    "toolbox": "工具箱",
+    "queue": "队列",
+    "instructions": "指令文件",
+    "settings": "设置"
+  },
+  "settings": {
+    "title": "设置",
+    "save": "保存",
+    "saving": "保存中...",
+    "unsavedChanges": "有未保存的更改",
+    "savedSuccess": "设置已保存",
+    "savedError": "保存设置失败",
+    "tabs": {
+      "general": "通用",
+      "bots": "机器人",
+      "advanced": "高级"
+    },
+    "general": {
+      "title": "通用设置",
+      "description": "Claude Code 核心配置，包括模型、主题和行为设置。",
+      "defaultModel": "默认模型",
+      "defaultModelDesc": "新会话使用的 AI 模型",
+      "theme": "主题",
+      "themeDesc": "面板外观模式",
+      "autoUpdate": "自动更新",
+      "autoUpdateDesc": "有新版本时自动更新 Claude Code",
+      "extendedThinking": "扩展思考",
+      "extendedThinkingDesc": "启用深度推理模式处理复杂任务",
+      "language": "语言",
+      "languageDesc": "面板显示语言"
+    },
+    "costAlerts": {
+      "title": "费用预警",
+      "description": "设置预算限额，费用超标时接收通知。设为 0 则禁用。",
+      "dailyBudget": "日预算",
+      "dailyBudgetDesc": "每日最大花费（超出时告警）",
+      "weeklyBudget": "周预算",
+      "weeklyBudgetDesc": "每周最大花费（超出时告警）",
+      "perDay": "每天",
+      "perWeek": "每周",
+      "disabled": "（已禁用）",
+      "alertsEnabled": "预警已启用",
+      "alertsEnabledDesc": "费用超出预算限额时会收到通知，每 60 秒检测一次。"
+    },
+    "permissions": {
+      "title": "权限",
+      "description": "工具访问控制和自动审批设置。",
+      "autoApprove": "自动批准工具",
+      "allowedTools": "允许的工具",
+      "deniedTools": "禁止的工具",
+      "allToolsAllowed": "所有工具已允许（默认）"
+    },
+    "hooks": {
+      "title": "Hooks",
+      "description": "响应工具生命周期事件执行的 Shell 命令。",
+      "preToolUse": "PreToolUse Hook",
+      "postToolUse": "PostToolUse Hook",
+      "stop": "Stop Hook",
+      "notConfigured": "未配置",
+      "configured": "已配置"
+    },
+    "telegram": {
+      "title": "Telegram 机器人",
+      "description": "连接 Telegram 机器人以远程管理会话和聊天。",
+      "notConfigured": "未配置",
+      "setEnvVar": "设置 {var} 环境变量以启用机器人。",
+      "tokenConfigured": "Token 已配置",
+      "webhookActive": "Webhook 已激活",
+      "currentWebhook": "当前 Webhook",
+      "pendingUpdates": "{count} 个待处理更新",
+      "lastError": "最近错误：{error}",
+      "setWebhookUrl": "设置 Webhook URL",
+      "updateWebhookUrl": "更新 Webhook URL",
+      "setWebhook": "设置 Webhook",
+      "setting": "设置中...",
+      "testConnection": "测试连接",
+      "supportedCommands": "支持的命令",
+      "checkingStatus": "正在检查机器人状态..."
+    },
+    "codex": {
+      "title": "Codex CLI",
+      "description": "OpenAI Codex CLI 配置和信任项目。",
+      "installed": "已安装",
+      "notInstalled": "未安装",
+      "installHint": "安装 Codex CLI 以启用 Codex 集成",
+      "sandbox": "沙箱",
+      "trustedProjects": "信任的项目"
+    },
+    "environment": {
+      "title": "环境信息",
+      "description": "系统信息和运行时环境详情。",
+      "platform": "平台",
+      "nodeVersion": "Node 版本",
+      "homeDir": "Home 目录",
+      "claudeDir": "Claude 目录",
+      "codexInstalled": "Codex 已安装",
+      "apiKeyConfigured": "API Key 已配置",
+      "apiKey": "API Key",
+      "proxy": "代理"
+    },
+    "rawConfig": {
+      "viewRaw": "查看原始配置",
+      "global": "全局 (~/.claude/settings.json)",
+      "local": "本地 (~/.claude/settings.local.json)",
+      "codex": "Codex (~/.codex/config.toml)"
+    }
+  },
+  "queue": {
+    "title": "队列",
+    "workerActive": "Worker 运行中",
+    "clearCompleted": "清除已完成",
+    "autoRefresh": "自动",
+    "manualRefresh": "手动",
+    "total": "总计",
+    "pending": "等待中",
+    "running": "运行中",
+    "completed": "已完成",
+    "failed": "失败",
+    "allSessions": "所有任务",
+    "noSessions": "暂无排队任务",
+    "noSessionsHint": "在 Telegram 中使用 /bg 或在聊天中点击队列按钮来添加任务。",
+    "columns": {
+      "id": "#",
+      "prompt": "提示词",
+      "provider": "提供者",
+      "status": "状态",
+      "created": "创建时间",
+      "duration": "耗时",
+      "actions": "操作"
+    }
+  },
+  "common": {
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "cancel": "取消",
+    "retry": "重试",
+    "loading": "加载中..."
+  }
+}

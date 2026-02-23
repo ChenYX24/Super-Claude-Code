@@ -22,7 +22,7 @@ import {
   formatChatResponse,
   formatError,
 } from "./message-formatter";
-import { fetchSessions, fetchStatus, chatWithClaude } from "./bot-helpers";
+import { fetchSessions, fetchStatus, chatWithProvider, parseProviderPrefix } from "./bot-helpers";
 import {
   enqueueSession,
   getQueueStats,
@@ -81,12 +81,18 @@ function parseFeishuMessage(event: Record<string, unknown>): BotMessage | null {
   };
 }
 
-/** Convert BotReply to Feishu-compatible plain text */
+/** Convert BotReply to Feishu-compatible plain text.
+ * Preserves structure but removes Telegram/Discord-specific markdown syntax.
+ */
 function replyToFeishuContent(reply: BotReply): string {
   if (reply.parseMode === "markdown") {
     return reply.text
+      // Bold: *text* -> text (Feishu uses ** for bold in rich text, but plain text has no bold)
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
       .replace(/\*([^*]+)\*/g, "$1")
+      // Italic: _text_ -> text
       .replace(/_([^_]+)_/g, "$1")
+      // Unescape escaped characters
       .replace(/\\([_*\[\]()~`>#+\-=|{}.!])/g, "$1");
   }
   return reply.text;
@@ -133,10 +139,11 @@ export class FeishuBot implements Bot {
 
     this.registry.register("chat", async (msg) => {
       if (!msg.args.trim()) {
-        return { text: "Usage: /chat <your message>\n\nExample: /chat explain this code", parseMode: "plain" as const };
+        return { text: "Usage: /chat [provider:] <your message>\n\nExamples:\n/chat explain this code\n/chat codex: refactor this function", parseMode: "plain" as const };
       }
       try {
-        const result = await chatWithClaude(baseUrl, msg.args.trim());
+        const { provider, message } = parseProviderPrefix(msg.args.trim());
+        const result = await chatWithProvider(baseUrl, message, provider);
         return formatChatResponse(result.content, result.model);
       } catch (err) {
         return formatError(err instanceof Error ? err.message : "Chat failed");
@@ -145,13 +152,15 @@ export class FeishuBot implements Bot {
 
     this.registry.register("bg", async (msg) => {
       if (!msg.args.trim()) {
-        return { text: "Usage: /bg <your message>\n\nQueues a background session. Results are sent when complete.", parseMode: "plain" as const };
+        return { text: "Usage: /bg [provider:] <your message>\n\nQueues a background session. Results are sent when complete.", parseMode: "plain" as const };
       }
       try {
+        const { provider, message } = parseProviderPrefix(msg.args.trim());
         const session = enqueueSession({
-          prompt: msg.args.trim(),
+          prompt: message,
           chatId: msg.chatId,
           platform: "feishu",
+          provider,
         });
         if (!isWorkerRunning()) startWorker();
         const truncPrompt = msg.args.trim().slice(0, 100) + (msg.args.trim().length > 100 ? "..." : "");
@@ -210,7 +219,22 @@ export class FeishuBot implements Bot {
         },
       });
     } catch (err) {
-      console.error("[FeishuBot] Failed to send message:", err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[FeishuBot] Failed to send message:", errMsg);
+      // Try to send an error message back to the user
+      try {
+        await this.client.im.message.create({
+          params: { receive_id_type: "chat_id" },
+          data: {
+            receive_id: chatId,
+            msg_type: "text",
+            content: JSON.stringify({ text: `[Error] Failed to send response: ${errMsg}` }),
+          },
+        });
+      } catch {
+        // Truly cannot reach the chat — log and move on
+        console.error("[FeishuBot] Could not send error notification to chat:", chatId);
+      }
     }
   }
 

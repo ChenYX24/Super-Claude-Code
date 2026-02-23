@@ -171,6 +171,33 @@ export function cancelSession(id: number): boolean {
   return result.changes > 0;
 }
 
+/** Clear all completed sessions from the queue. Returns the count removed. */
+export function clearCompleted(): number {
+  const db = getDb();
+  const result = db.prepare(
+    "DELETE FROM session_queue WHERE status = 'completed'"
+  ).run();
+  return result.changes;
+}
+
+/** Retry a failed session by re-enqueuing with same parameters. */
+export function retrySession(id: number): QueuedSession | null {
+  const db = getDb();
+  const session = db
+    .prepare("SELECT * FROM session_queue WHERE id = ? AND status = 'failed'")
+    .get(id) as QueuedSession | undefined;
+
+  if (!session) return null;
+
+  return enqueueSession({
+    prompt: session.prompt,
+    chatId: session.chat_id,
+    platform: session.platform,
+    provider: session.provider,
+    cwd: session.cwd || undefined,
+  });
+}
+
 /** Get count of pending sessions */
 export function getPendingCount(): number {
   const db = getDb();

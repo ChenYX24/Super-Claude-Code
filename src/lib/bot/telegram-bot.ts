@@ -13,7 +13,7 @@ import {
   formatChatResponse,
   formatError,
 } from "./message-formatter";
-import { fetchSessions, fetchStatus, chatWithClaude } from "./bot-helpers";
+import { fetchSessions, fetchStatus, chatWithProvider, parseProviderPrefix } from "./bot-helpers";
 import {
   enqueueSession,
   getQueueStats,
@@ -97,10 +97,11 @@ export class TelegramBot implements Bot {
 
     this.registry.register("chat", async (msg) => {
       if (!msg.args.trim()) {
-        return { text: "Usage: /chat <your message>\n\nExample: /chat explain this code", parseMode: "plain" as const };
+        return { text: "Usage: /chat [provider:] <your message>\n\nExamples:\n/chat explain this code\n/chat codex: refactor this function", parseMode: "plain" as const };
       }
       try {
-        const result = await chatWithClaude(baseUrl, msg.args.trim());
+        const { provider, message } = parseProviderPrefix(msg.args.trim());
+        const result = await chatWithProvider(baseUrl, message, provider);
         return formatChatResponse(result.content, result.model);
       } catch (err) {
         return formatError(err instanceof Error ? err.message : "Chat failed");
@@ -109,13 +110,15 @@ export class TelegramBot implements Bot {
 
     this.registry.register("bg", async (msg) => {
       if (!msg.args.trim()) {
-        return { text: "Usage: /bg <your message>\n\nQueues a background session. Results are sent when complete.", parseMode: "plain" as const };
+        return { text: "Usage: /bg [provider:] <your message>\n\nQueues a background session. Results are sent when complete.", parseMode: "plain" as const };
       }
       try {
+        const { provider, message } = parseProviderPrefix(msg.args.trim());
         const session = enqueueSession({
-          prompt: msg.args.trim(),
+          prompt: message,
           chatId: msg.chatId,
           platform: "telegram",
+          provider,
         });
         if (!isWorkerRunning()) startWorker();
         return {
@@ -184,13 +187,11 @@ export class TelegramBot implements Bot {
   private async handleText(ctx: { message: { text: string; chat: { id: number }; from: { id: number; first_name: string } }; reply: (text: string, extra?: Record<string, unknown>) => Promise<unknown> }) {
     const { text, chat, from } = ctx.message;
     const msg = parseMessage(text, chat.id, from.id, from.first_name);
-    // Non-command text -> treat as chat message
+    // Non-command text -> route through registry as "chat" command
+    msg.command = "chat";
     msg.args = msg.text;
-    const chatHandler = this.registry.handlers.get("chat");
-    if (chatHandler) {
-      const reply = await chatHandler(msg);
-      await this.sendReply(ctx, reply);
-    }
+    const reply = await this.registry.handle(msg);
+    await this.sendReply(ctx, reply);
   }
 
   private async sendReply(ctx: { reply: (text: string, extra?: Record<string, unknown>) => Promise<unknown> }, reply: BotReply) {

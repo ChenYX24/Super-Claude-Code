@@ -65,13 +65,16 @@ export function formatHelp(): BotReply {
     "Available commands:",
     "",
     "/sessions - List recent sessions",
-    "/chat <message> - Send a message to Claude",
+    "/chat <message> - Chat with Claude (default)",
+    "/chat codex: <message> - Chat with Codex",
     "/bg <message> - Queue a background session",
+    "/bg codex: <message> - Background session via Codex",
     "/queue - Show background queue status",
     "/status - Show dashboard status",
     "/help - Show this help message",
     "",
     "You can also send a message directly without a command to chat with Claude.",
+    "Prefix with `codex:` to use Codex instead, e.g. `/chat codex: explain this`.",
     "Use /bg for long tasks — results are sent when complete.",
   ];
 

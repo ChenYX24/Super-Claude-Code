@@ -1,29 +1,32 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/toast";
 import {
   Settings as SettingsIcon,
-  Shield,
-  Zap,
-  Globe,
-  CheckCircle,
-  XCircle,
-  Eye,
-  EyeOff,
   Save,
-  Bell,
-  DollarSign,
-  MessageCircle,
-  Terminal,
   Loader2,
+  Bot,
+  SlidersHorizontal,
+  Monitor,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import type { ClaudeSettings, CodexSettings, EnvironmentInfo } from "@/lib/settings-reader";
 import { useNotifications } from "@/hooks/use-notifications";
+import { GeneralSettings } from "@/components/settings/general-settings";
+import { CostAlertSettings } from "@/components/settings/cost-alert-settings";
+import { PermissionsSettings } from "@/components/settings/permissions-settings";
+import { HooksSettings } from "@/components/settings/hooks-settings";
+import { ClaudeCliSettings } from "@/components/settings/claude-cli-settings";
+import { CodexSettingsComponent } from "@/components/settings/codex-settings";
+import { TelegramSettings } from "@/components/settings/telegram-settings";
+import { FeishuSettings } from "@/components/settings/feishu-settings";
+import { EnvironmentInfoCard } from "@/components/settings/environment-info";
+import { RawConfigPreview } from "@/components/settings/raw-config-preview";
 
 interface SettingsResponse {
   global: ClaudeSettings;
@@ -35,12 +38,13 @@ interface SettingsResponse {
 
 export default function SettingsPage() {
   const [data, setData] = useState<SettingsResponse | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
   const { toast } = useToast();
   const { alertConfig, updateAlertConfig } = useNotifications();
+  const tMsg = useTranslations("settings");
 
   // Editable fields
   const [defaultModel, setDefaultModel] = useState("");
+  const [codexDefaultModel, setCodexDefaultModel] = useState("");
   const [theme, setTheme] = useState("");
   const [autoUpdate, setAutoUpdate] = useState(true);
   const [alwaysThinkingEnabled, setAlwaysThinkingEnabled] = useState(true);
@@ -52,6 +56,7 @@ export default function SettingsPage() {
   // Track original values to detect changes
   const [originalValues, setOriginalValues] = useState({
     defaultModel: "",
+    codexDefaultModel: "",
     theme: "",
     autoUpdate: true,
     alwaysThinkingEnabled: true,
@@ -59,9 +64,9 @@ export default function SettingsPage() {
     weeklyBudget: 0,
   });
 
-  // Track if there are unsaved changes
   const hasChanges =
     defaultModel !== originalValues.defaultModel ||
+    codexDefaultModel !== originalValues.codexDefaultModel ||
     theme !== originalValues.theme ||
     autoUpdate !== originalValues.autoUpdate ||
     alwaysThinkingEnabled !== originalValues.alwaysThinkingEnabled ||
@@ -70,18 +75,6 @@ export default function SettingsPage() {
 
   const [isSaving, setIsSaving] = useState(false);
 
-  // Telegram Bot state
-  const [botStatus, setBotStatus] = useState<{
-    configured: boolean;
-    url: string | null;
-    pendingUpdateCount?: number;
-    lastErrorMessage?: string | null;
-    error?: string;
-  } | null>(null);
-  const [botLoading, setBotLoading] = useState(true);
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [settingWebhook, setSettingWebhook] = useState(false);
-
   const loadSettings = () => {
     fetch("/api/settings")
       .then((r) => r.json())
@@ -89,20 +82,21 @@ export default function SettingsPage() {
         setData(response);
         const merged = response.merged;
 
-        // Initialize editable fields
         const model = merged.defaultModel || "claude-sonnet-4-5-20250929";
+        const codexModel = merged.codexDefaultModel as string || "o3";
         const themeValue = merged.theme || "system";
         const autoUpdateValue = merged.autoUpdate ?? true;
         const thinkingValue = merged.alwaysThinkingEnabled ?? true;
 
         setDefaultModel(model);
+        setCodexDefaultModel(codexModel);
         setTheme(themeValue);
         setAutoUpdate(autoUpdateValue);
         setAlwaysThinkingEnabled(thinkingValue);
 
-        // Store original values
         setOriginalValues({
           defaultModel: model,
+          codexDefaultModel: codexModel,
           theme: themeValue,
           autoUpdate: autoUpdateValue,
           alwaysThinkingEnabled: thinkingValue,
@@ -112,7 +106,6 @@ export default function SettingsPage() {
       });
   };
 
-  // Load alert config on mount
   useEffect(() => {
     setDailyBudget(alertConfig.dailyBudget);
     setWeeklyBudget(alertConfig.weeklyBudget);
@@ -122,53 +115,15 @@ export default function SettingsPage() {
     loadSettings();
   }, []);
 
-  // Load Telegram bot status
-  useEffect(() => {
-    fetch("/api/bot/telegram/setup")
-      .then((r) => r.json())
-      .then((data) => {
-        setBotStatus(data);
-        if (data.url) setWebhookUrl(data.url);
-      })
-      .catch(() => setBotStatus({ configured: false, url: null, error: "Failed to connect" }))
-      .finally(() => setBotLoading(false));
-  }, []);
-
-  const handleSetWebhook = async () => {
-    if (!webhookUrl.trim()) {
-      toast("Please enter a webhook URL", "error");
-      return;
-    }
-    setSettingWebhook(true);
-    try {
-      const res = await fetch("/api/bot/telegram/setup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: webhookUrl.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        toast("Webhook set successfully", "success");
-        setBotStatus({ configured: true, url: webhookUrl.trim(), pendingUpdateCount: 0, lastErrorMessage: null });
-      } else {
-        toast(data.error || "Failed to set webhook", "error");
-      }
-    } catch {
-      toast("Failed to set webhook", "error");
-    } finally {
-      setSettingWebhook(false);
-    }
-  };
-
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // Save Claude settings
       const response = await fetch("/api/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           defaultModel,
+          codexDefaultModel,
           theme,
           autoUpdate,
           alwaysThinkingEnabled,
@@ -178,21 +133,15 @@ export default function SettingsPage() {
       const result = await response.json();
 
       if (result.success) {
-        // Save alert config to localStorage
-        updateAlertConfig({
-          dailyBudget,
-          weeklyBudget,
-        });
-
-        toast("Settings saved successfully", "success");
-        // Reload to get updated values
+        updateAlertConfig({ dailyBudget, weeklyBudget });
+        toast(tMsg("savedSuccess"), "success");
         loadSettings();
       } else {
-        toast(result.error || "Failed to save settings", "error");
+        toast(result.error || tMsg("savedError"), "error");
       }
     } catch (error) {
       console.error("Save error:", error);
-      toast("Failed to save settings", "error");
+      toast(tMsg("savedError"), "error");
     } finally {
       setIsSaving(false);
     }
@@ -208,64 +157,36 @@ export default function SettingsPage() {
           </div>
           <Skeleton className="h-9 w-24" />
         </div>
-
-        {/* General Settings Skeleton */}
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-32" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-4 w-[180px]" />
-                <Skeleton className="h-9 w-48" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Cost Alerts Skeleton */}
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-32" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Skeleton className="h-10 w-full" />
-            {[1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-4 w-[180px]" />
-                <Skeleton className="h-9 w-32" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        {/* Permissions Skeleton */}
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-32" />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="h-4 w-[180px]" />
-                <Skeleton className="h-6 w-24" />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <Skeleton className="h-10 w-full max-w-md" />
+        {[1, 2, 3].map((i) => (
+          <Card key={i}>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {[1, 2, 3].map((j) => (
+                <div key={j} className="flex items-center gap-3">
+                  <Skeleton className="h-4 w-[180px]" />
+                  <Skeleton className="h-9 w-48" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
   }
 
   const { merged, environment } = data;
+  const t = tMsg;
 
   return (
     <div className="space-y-6">
+      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <SettingsIcon className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Settings</h1>
+          <h1 className="text-2xl font-bold">{t("title")}</h1>
         </div>
         <div className="flex items-center gap-2">
           {hasChanges && (
@@ -274,7 +195,7 @@ export default function SettingsPage() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
               </span>
-              <span>Unsaved changes</span>
+              <span>{t("unsavedChanges")}</span>
             </div>
           )}
           <Button
@@ -283,589 +204,76 @@ export default function SettingsPage() {
             variant="default"
             size="sm"
           >
-            <Save className="h-4 w-4" />
-            {isSaving ? "Saving..." : "Save"}
+            {isSaving ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {isSaving ? t("saving") : t("save")}
           </Button>
         </div>
       </div>
 
-      {/* General Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <SettingsIcon className="h-5 w-5" />
-            General
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Default Model */}
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-muted-foreground min-w-[180px]">
-              Default Model
-            </div>
-            <select
-              value={defaultModel}
-              onChange={(e) => setDefaultModel(e.target.value)}
-              className="bg-muted border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="claude-opus-4-6">Opus 4.6</option>
-              <option value="claude-sonnet-4-5-20250929">Sonnet 4.5</option>
-              <option value="claude-haiku-4-5-20251001">Haiku 4.5</option>
-            </select>
-          </div>
+      {/* Tabs */}
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="w-full sm:w-auto">
+          <TabsTrigger value="general">
+            <SlidersHorizontal className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("tabs.general")}</span>
+          </TabsTrigger>
+          <TabsTrigger value="bots">
+            <Bot className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("tabs.bots")}</span>
+          </TabsTrigger>
+          <TabsTrigger value="advanced">
+            <Monitor className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("tabs.advanced")}</span>
+          </TabsTrigger>
+        </TabsList>
 
-          {/* Theme */}
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-muted-foreground min-w-[180px]">
-              Theme
-            </div>
-            <select
-              value={theme}
-              onChange={(e) => setTheme(e.target.value)}
-              className="bg-muted border border-border rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="system">System</option>
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-            </select>
-          </div>
-
-          {/* Auto Update */}
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-muted-foreground min-w-[180px]">
-              Auto Update
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={autoUpdate}
-                onChange={(e) => setAutoUpdate(e.target.checked)}
-                className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-ring"
-              />
-              <Badge variant={autoUpdate ? "default" : "secondary"}>
-                {autoUpdate ? (
-                  <>
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Enabled
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Disabled
-                  </>
-                )}
-              </Badge>
-            </label>
-          </div>
-
-          {/* Extended Thinking Enabled */}
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-muted-foreground min-w-[180px]">
-              Extended Thinking Enabled
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={alwaysThinkingEnabled}
-                onChange={(e) => setAlwaysThinkingEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-ring"
-              />
-              <Badge variant={alwaysThinkingEnabled ? "default" : "secondary"}>
-                {alwaysThinkingEnabled ? (
-                  <>
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Enabled
-                  </>
-                ) : (
-                  <>
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Disabled
-                  </>
-                )}
-              </Badge>
-            </label>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Cost Alerts */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Cost Alerts
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="text-sm text-muted-foreground mb-4">
-            Set budget limits to receive notifications when costs exceed thresholds. Set to 0 to disable.
-          </div>
-
-          {/* Daily Budget */}
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-muted-foreground min-w-[180px]">
-              Daily Budget
-            </div>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={dailyBudget}
-                onChange={(e) => setDailyBudget(Number(e.target.value))}
-                className="bg-muted border border-border rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="0.00"
-              />
-              <span className="text-xs text-muted-foreground">
-                {dailyBudget === 0 ? "(disabled)" : "per day"}
-              </span>
-            </div>
-          </div>
-
-          {/* Weekly Budget */}
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-muted-foreground min-w-[180px]">
-              Weekly Budget
-            </div>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={weeklyBudget}
-                onChange={(e) => setWeeklyBudget(Number(e.target.value))}
-                className="bg-muted border border-border rounded px-3 py-1.5 text-sm font-mono w-32 focus:outline-none focus:ring-2 focus:ring-ring"
-                placeholder="0.00"
-              />
-              <span className="text-xs text-muted-foreground">
-                {weeklyBudget === 0 ? "(disabled)" : "per week"}
-              </span>
-            </div>
-          </div>
-
-          {/* Alert Status */}
-          {(dailyBudget > 0 || weeklyBudget > 0) && (
-            <div className="mt-4 p-3 bg-muted/50 rounded-md">
-              <div className="flex items-start gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                <div className="text-sm">
-                  <p className="font-medium">Alerts enabled</p>
-                  <p className="text-muted-foreground text-xs mt-1">
-                    You'll receive notifications when costs exceed your budget limits.
-                    Checks run every 60 seconds.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Permissions */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Permissions
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <SettingRow
-            label="Auto Approve Tools"
-            value={merged.permissions?.autoApprove ?? false}
-            type="boolean"
+        {/* General Tab */}
+        <TabsContent value="general" className="space-y-6">
+          <GeneralSettings
+            defaultModel={defaultModel}
+            codexDefaultModel={codexDefaultModel}
+            codexInstalled={environment.codexInstalled}
+            theme={theme}
+            autoUpdate={autoUpdate}
+            alwaysThinkingEnabled={alwaysThinkingEnabled}
+            onDefaultModelChange={setDefaultModel}
+            onCodexDefaultModelChange={setCodexDefaultModel}
+            onThemeChange={setTheme}
+            onAutoUpdateChange={setAutoUpdate}
+            onThinkingChange={setAlwaysThinkingEnabled}
           />
-          <div className="space-y-2">
-            <div className="text-sm text-muted-foreground">Allowed Tools</div>
-            <div className="flex flex-wrap gap-2">
-              {merged.permissions?.allowedTools &&
-              merged.permissions.allowedTools.length > 0 ? (
-                merged.permissions.allowedTools.map((tool) => (
-                  <Badge key={tool} variant="secondary">
-                    <CheckCircle className="h-3 w-3 mr-1 text-green-600" />
-                    {tool}
-                  </Badge>
-                ))
-              ) : (
-                <span className="text-sm text-muted-foreground">
-                  All tools allowed (default)
-                </span>
-              )}
-            </div>
-          </div>
-          {merged.permissions?.deniedTools &&
-            merged.permissions.deniedTools.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Denied Tools</div>
-                <div className="flex flex-wrap gap-2">
-                  {merged.permissions.deniedTools.map((tool) => (
-                    <Badge key={tool} variant="destructive">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      {tool}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-        </CardContent>
-      </Card>
-
-      {/* Hooks */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Zap className="h-5 w-5" />
-            Hooks
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <HookDisplay
-            label="PreToolUse Hook"
-            hook={merged.preToolUseHook}
+          <CostAlertSettings
+            dailyBudget={dailyBudget}
+            weeklyBudget={weeklyBudget}
+            onDailyBudgetChange={setDailyBudget}
+            onWeeklyBudgetChange={setWeeklyBudget}
           />
-          <HookDisplay
-            label="PostToolUse Hook"
-            hook={merged.postToolUseHook}
+          <PermissionsSettings merged={merged} />
+          <HooksSettings merged={merged} />
+        </TabsContent>
+
+        {/* Bots Tab */}
+        <TabsContent value="bots" className="space-y-6">
+          <TelegramSettings />
+          <FeishuSettings />
+        </TabsContent>
+
+        {/* Advanced Tab */}
+        <TabsContent value="advanced" className="space-y-6">
+          <ClaudeCliSettings environment={environment} merged={merged} />
+          <CodexSettingsComponent codex={data.codex} />
+          <EnvironmentInfoCard environment={environment} />
+          <RawConfigPreview
+            global={data.global}
+            local={data.local}
+            codex={data.codex}
           />
-          <HookDisplay label="Stop Hook" hook={merged.stopHook} />
-        </CardContent>
-      </Card>
-
-      {/* Codex Settings */}
-      {data.codex && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Zap className="h-5 w-5" />
-              Codex CLI
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <SettingRow label="Installed" value={true} type="boolean" />
-            {data.codex.sandbox && (
-              <SettingRow label="Sandbox" value={String(data.codex.sandbox)} />
-            )}
-            {data.codex.projects.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">Trusted Projects</div>
-                <div className="space-y-1">
-                  {data.codex.projects.map((p) => (
-                    <div key={p.path} className="flex items-center gap-2">
-                      <Badge variant={p.trust_level === "trusted" ? "default" : "secondary"} className="text-xs">
-                        {p.trust_level}
-                      </Badge>
-                      <code className="text-xs bg-muted px-2 py-0.5 rounded truncate max-w-md">
-                        {p.path}
-                      </code>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Telegram Bot */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <MessageCircle className="h-5 w-5" />
-            Telegram Bot
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="text-sm text-muted-foreground">
-            Connect a Telegram bot for remote session management and chat.
-          </div>
-
-          {/* Status */}
-          {botLoading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking bot status...
-            </div>
-          ) : botStatus?.error === "TELEGRAM_BOT_TOKEN not configured" ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">
-                  <XCircle className="h-3 w-3 mr-1" />
-                  Not Configured
-                </Badge>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                Set <code className="bg-muted px-1 py-0.5 rounded text-xs">TELEGRAM_BOT_TOKEN</code> environment variable to enable the bot.
-              </div>
-              <div className="bg-muted rounded-md p-3 space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <Terminal className="h-3 w-3 text-muted-foreground shrink-0" />
-                  <span>TELEGRAM_BOT_TOKEN=&lt;your-bot-token&gt;</span>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-mono">
-                  <Terminal className="h-3 w-3 text-muted-foreground shrink-0" />
-                  <span>TELEGRAM_CHAT_IDS=&lt;comma-separated-chat-ids&gt;</span>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Token Status */}
-              <div className="flex items-center gap-2">
-                <Badge variant="default">
-                  <CheckCircle className="h-3 w-3 mr-1" />
-                  Token Configured
-                </Badge>
-                {botStatus?.configured && botStatus.url && (
-                  <Badge variant="default">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Webhook Active
-                  </Badge>
-                )}
-              </div>
-
-              {/* Current Webhook Info */}
-              {botStatus?.url && (
-                <div className="bg-muted/50 rounded-md p-3 space-y-1">
-                  <div className="text-xs font-medium">Current Webhook</div>
-                  <code className="text-xs break-all">{botStatus.url}</code>
-                  {botStatus.pendingUpdateCount !== undefined && botStatus.pendingUpdateCount > 0 && (
-                    <div className="text-xs text-amber-600 mt-1">
-                      {botStatus.pendingUpdateCount} pending update(s)
-                    </div>
-                  )}
-                  {botStatus.lastErrorMessage && (
-                    <div className="text-xs text-red-500 mt-1">
-                      Last error: {botStatus.lastErrorMessage}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Set/Update Webhook */}
-              <div className="space-y-2">
-                <div className="text-sm font-medium">
-                  {botStatus?.url ? "Update" : "Set"} Webhook URL
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={webhookUrl}
-                    onChange={(e) => setWebhookUrl(e.target.value)}
-                    className="flex-1 px-3 py-1.5 text-sm font-mono border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="https://your-domain.com/api/bot/telegram"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={handleSetWebhook}
-                    disabled={settingWebhook || !webhookUrl.trim()}
-                  >
-                    {settingWebhook ? (
-                      <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Setting...</>
-                    ) : (
-                      "Set Webhook"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Supported Commands (always show) */}
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Supported Commands</div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {[
-                { cmd: "/help", desc: "Show available commands" },
-                { cmd: "/sessions", desc: "List active sessions" },
-                { cmd: "/status", desc: "Dashboard status overview" },
-                { cmd: "/chat", desc: "Chat with Claude session" },
-                { cmd: "/bg", desc: "Run background task" },
-                { cmd: "/queue", desc: "View task queue" },
-              ].map((item) => (
-                <div key={item.cmd} className="flex items-center gap-2 text-xs bg-muted/50 rounded px-2 py-1.5">
-                  <code className="font-mono font-medium text-primary">{item.cmd}</code>
-                  <span className="text-muted-foreground">{item.desc}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Environment */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Globe className="h-5 w-5" />
-            Environment
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <SettingRow label="Platform" value={environment.platform} />
-          <SettingRow label="Node Version" value={environment.nodeVersion} />
-          <SettingRow label="Home Directory" value={environment.homeDir} />
-          <SettingRow label="Claude Directory" value={environment.claudeDir} />
-          <SettingRow label="Codex Installed" value={environment.codexInstalled} type="boolean" />
-          <SettingRow
-            label="API Key Configured"
-            value={environment.hasApiKey}
-            type="boolean"
-          />
-          {environment.hasApiKey && environment.apiKeyMasked && (
-            <div className="flex items-center gap-3">
-              <div className="text-sm text-muted-foreground min-w-[150px]">
-                API Key
-              </div>
-              <div className="flex items-center gap-2">
-                <code className="text-sm bg-muted px-2 py-1 rounded">
-                  {showApiKey ? environment.apiKeyMasked : "••••••••••••"}
-                </code>
-                <button
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {showApiKey ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-          )}
-          {environment.proxyUrl && (
-            <SettingRow label="Proxy" value={environment.proxyUrl} />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Raw Config Preview */}
-      <details className="group">
-        <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
-          View Raw Configuration
-        </summary>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">
-                Global (~/.claude/settings.json)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-96">
-                {JSON.stringify(data.global, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">
-                Local (~/.claude/settings.local.json)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-96">
-                {JSON.stringify(data.local, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-          {data.codex && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">
-                  Codex (~/.codex/config.toml)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-96">
-                  {JSON.stringify(data.codex, null, 2)}
-                </pre>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </details>
-    </div>
-  );
-}
-
-// ---- Helper Components ----
-
-function SettingRow({
-  label,
-  value,
-  type = "string",
-}: {
-  label: string;
-  value: string | boolean | number | undefined;
-  type?: "string" | "boolean" | "number";
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="text-sm text-muted-foreground min-w-[180px]">{label}</div>
-      <div>
-        {type === "boolean" ? (
-          <Badge variant={value ? "default" : "secondary"}>
-            {value ? (
-              <>
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Enabled
-              </>
-            ) : (
-              <>
-                <XCircle className="h-3 w-3 mr-1" />
-                Disabled
-              </>
-            )}
-          </Badge>
-        ) : (
-          <code className="text-sm bg-muted px-2 py-1 rounded">
-            {String(value || "—")}
-          </code>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function HookDisplay({
-  label,
-  hook,
-}: {
-  label: string;
-  hook?: { command: string; description?: string };
-}) {
-  if (!hook) {
-    return (
-      <div className="space-y-1">
-        <div className="text-sm text-muted-foreground">{label}</div>
-        <Badge variant="secondary">
-          <XCircle className="h-3 w-3 mr-1" />
-          Not Configured
-        </Badge>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className="space-y-1">
-        <Badge variant="default">
-          <CheckCircle className="h-3 w-3 mr-1" />
-          Configured
-        </Badge>
-        <code className="block text-xs bg-muted p-2 rounded mt-1">
-          {hook.command}
-        </code>
-        {hook.description && (
-          <p className="text-xs text-muted-foreground mt-1">
-            {hook.description}
-          </p>
-        )}
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

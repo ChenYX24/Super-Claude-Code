@@ -77,6 +77,63 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/** PUT: test connection — sends a test message to all configured chat IDs */
+export async function PUT(req: NextRequest) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) {
+    return NextResponse.json(
+      { error: "TELEGRAM_BOT_TOKEN not configured" },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const body = await req.json();
+    if (body.action !== "test") {
+      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    }
+
+    const chatIds = process.env.TELEGRAM_CHAT_IDS
+      ? process.env.TELEGRAM_CHAT_IDS.split(",").map(s => s.trim()).filter(Boolean)
+      : [];
+
+    if (chatIds.length === 0) {
+      return NextResponse.json(
+        { error: "No TELEGRAM_CHAT_IDS configured" },
+        { status: 400 },
+      );
+    }
+
+    const results = [];
+    for (const chatId of chatIds) {
+      const telegramUrl = `https://api.telegram.org/bot${token}/sendMessage`;
+      const res = await fetch(telegramUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: "SCC Dashboard test message — connection is working!",
+        }),
+      });
+      const data = await res.json();
+      results.push({ chatId, ok: data.ok, error: data.description });
+    }
+
+    const allOk = results.every(r => r.ok);
+    return NextResponse.json({
+      success: allOk,
+      results,
+      message: allOk ? "Test message sent" : "Some messages failed",
+    });
+  } catch (err) {
+    console.error("[Telegram Test] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to send test message" },
+      { status: 500 },
+    );
+  }
+}
+
 /** GET: check current webhook info */
 export async function GET() {
   const token = process.env.TELEGRAM_BOT_TOKEN;

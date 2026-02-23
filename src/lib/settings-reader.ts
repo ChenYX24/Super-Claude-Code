@@ -225,6 +225,7 @@ export interface EnvironmentInfo {
   hasApiKey: boolean;
   apiKeyMasked?: string;
   proxyUrl?: string;
+  claudeInstalled: boolean;
   codexInstalled: boolean;
 }
 
@@ -238,6 +239,7 @@ export function getEnvironmentInfo(settings: ClaudeSettings): EnvironmentInfo {
     hasApiKey: !!settings.apiKey || !!process.env.ANTHROPIC_API_KEY,
     apiKeyMasked: settings.apiKey || maskApiKey(process.env.ANTHROPIC_API_KEY),
     proxyUrl: settings.proxyUrl || process.env.HTTP_PROXY || process.env.HTTPS_PROXY,
+    claudeInstalled: fs.existsSync(CLAUDE_DIR),
     codexInstalled: fs.existsSync(CODEX_DIR),
   };
 }
