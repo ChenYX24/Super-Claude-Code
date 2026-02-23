@@ -14,10 +14,13 @@ import { SkillsTab } from "@/components/toolbox/skills-tab";
 import { HooksTab } from "@/components/toolbox/hooks-tab";
 import { AgentsTab } from "@/components/toolbox/agents-tab";
 import { RulesTab } from "@/components/toolbox/rules-tab";
+import { AiCreatorDialog } from "@/components/toolbox/ai-creator-dialog";
+import { ExportDialog, ImportDialog } from "@/components/toolbox/import-export-dialog";
 import type { MCPRegistryEntry } from "@/lib/mcp-registry";
 import {
   Wrench, Plug, Sparkles, Command, Shield, Bot, BookOpen,
-  RefreshCw, HelpCircle, X, AlertCircle, ShoppingBag, Plus,
+  RefreshCw, HelpCircle, X, AlertCircle, ShoppingBag, Plus, Wand2,
+  Download, Upload,
 } from "lucide-react";
 import type {
   ToolboxData,
@@ -132,7 +135,7 @@ function SummaryStats({ data }: { data: ToolboxData }) {
   ];
 
   return (
-    <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 sm:gap-3">
       {stats.map(({ icon: Icon, label, value, color }) => (
         <Card key={label} className="text-center">
           <CardContent className="py-3 px-2">
@@ -874,6 +877,9 @@ export default function ToolboxPage() {
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState<Record<string, HealthStatus>>({});
   const [showHelp, setShowHelp] = useState(false);
+  const [showAiCreator, setShowAiCreator] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -931,9 +937,20 @@ export default function ToolboxPage() {
             Claude Code configuration center — MCP servers, skills, hooks, agents & rules
           </p>
         </div>
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowHelp(true)}>
-          <HelpCircle className="h-4 w-4" /> Help
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" className="gap-1.5" onClick={() => setShowAiCreator(true)}>
+            <Wand2 className="h-4 w-4" /> AI Create
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImport(true)}>
+            <Upload className="h-4 w-4" /> Import
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowExport(true)}>
+            <Download className="h-4 w-4" /> Export
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowHelp(true)}>
+            <HelpCircle className="h-4 w-4" /> Help
+          </Button>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -941,26 +958,26 @@ export default function ToolboxPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="mcp">
-        <TabsList>
-          <TabsTrigger value="mcp" className="gap-1.5">
+        <TabsList className="w-full sm:w-auto overflow-x-auto">
+          <TabsTrigger value="mcp" className="gap-1.5 touch-manipulation">
             <Plug className="h-3.5 w-3.5" /> MCP
             {mcpCount > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{mcpCount}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="skills" className="gap-1.5">
+          <TabsTrigger value="skills" className="gap-1.5 touch-manipulation">
             <Sparkles className="h-3.5 w-3.5" /> Skills
             {(data.skills.length + data.commands.length) > 0 && (
               <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.skills.length + data.commands.length}</Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="hooks" className="gap-1.5">
+          <TabsTrigger value="hooks" className="gap-1.5 touch-manipulation">
             <Shield className="h-3.5 w-3.5" /> Hooks
             {data.hooks.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.hooks.length}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="agents" className="gap-1.5">
+          <TabsTrigger value="agents" className="gap-1.5 touch-manipulation">
             <Bot className="h-3.5 w-3.5" /> Agents
             {data.agents.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.agents.length}</Badge>}
           </TabsTrigger>
-          <TabsTrigger value="rules" className="gap-1.5">
+          <TabsTrigger value="rules" className="gap-1.5 touch-manipulation">
             <BookOpen className="h-3.5 w-3.5" /> Rules
             {data.rules.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.rules.length}</Badge>}
           </TabsTrigger>
@@ -993,6 +1010,29 @@ export default function ToolboxPage() {
 
       {/* Help Dialog */}
       <HelpDialog open={showHelp} onClose={() => setShowHelp(false)} />
+
+      {/* AI Creator Dialog */}
+      <AiCreatorDialog
+        open={showAiCreator}
+        onClose={() => setShowAiCreator(false)}
+        onSuccess={fetchData}
+      />
+
+      {/* Export Dialog */}
+      <ExportDialog
+        open={showExport}
+        onClose={() => setShowExport(false)}
+        skills={data.skills}
+        agents={data.agents}
+        rules={data.rules}
+      />
+
+      {/* Import Dialog */}
+      <ImportDialog
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onSuccess={fetchData}
+      />
     </div>
   );
 }

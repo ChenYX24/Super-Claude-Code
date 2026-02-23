@@ -35,8 +35,16 @@ export function formatDT(ms: number): string {
 
 export function shortModel(m?: string): string {
   if (!m) return "";
+  // Claude models
   if (m.includes("opus")) return "Opus";
   if (m.includes("sonnet")) return "Sonnet";
   if (m.includes("haiku")) return "Haiku";
+  // Codex / OpenAI models
+  if (m.includes("gpt-5.2")) return "GPT-5.2";
+  if (m.includes("gpt-5.3")) return "GPT-5.3";
+  if (m.includes("gpt-4.1")) return "GPT-4.1";
+  if (m === "o3-pro") return "o3-Pro";
+  if (m === "o3") return "o3";
+  if (m === "o4-mini") return "o4-Mini";
   return m;
 }

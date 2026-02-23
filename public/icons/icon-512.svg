@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="64" fill="#0a0a0a"/>
+  <g transform="translate(256, 240)">
+    <!-- Lightning bolt -->
+    <path d="M-22,-110 L33,-110 L11,-22 L66,-22 L-33,110 L-11,22 L-66,22 Z" fill="#7c3aed"/>
+    <!-- Subtle glow -->
+    <path d="M-22,-110 L33,-110 L11,-22 L66,-22 L-33,110 L-11,22 L-66,22 Z" fill="#a78bfa" opacity="0.3" transform="scale(1.05)"/>
+  </g>
+  <!-- SCC text -->
+  <text x="256" y="430" text-anchor="middle" font-family="system-ui, sans-serif" font-size="52" font-weight="700" fill="#e5e7eb">SCC</text>
+</svg>

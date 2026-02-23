@@ -49,11 +49,13 @@ export const DEFAULT_TOOL_CONFIG = {
 };
 
 // Conversation Message Component
-export function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch }: {
+export function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch, isLive, phaseBadge }: {
   msg: SessionMessage;
   showTools: boolean;
   searchHighlight?: string;
   isSearchMatch?: boolean;
+  isLive?: boolean;
+  phaseBadge?: string;
 }) {
   const [thinkingExpanded, setThinkingExpanded] = useState(false);
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
@@ -94,6 +96,9 @@ export function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch }: 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-sm font-semibold">{isUser ? "You" : "Claude"}</span>
+          {phaseBadge && (
+            <span className="text-xs text-amber-600 dark:text-amber-400 animate-pulse">{phaseBadge}</span>
+          )}
           {msg.model && <Badge variant="secondary" className="text-xs h-4">{shortModel(msg.model)}</Badge>}
           <span className="text-xs text-muted-foreground">
             {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}
@@ -231,7 +236,15 @@ export function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch }: 
           </div>
         )}
 
-        {hasContent && <MarkdownContent content={msg.content} className="text-sm" />}
+        {hasContent && (
+          <div className="relative">
+            <MarkdownContent content={msg.content} className="text-sm" />
+            {isLive && <span className="inline-block w-2 h-4 bg-foreground/80 animate-pulse ml-0.5 align-text-bottom" />}
+          </div>
+        )}
+        {!hasContent && isLive && (
+          <span className="inline-block w-2 h-4 bg-foreground/80 animate-pulse" />
+        )}
       </div>
     </div>
   );

@@ -77,20 +77,31 @@ function DailyTooltip({ active, payload, label }: any) {
 }
 
 type TimeRange = "7d" | "14d" | "30d" | "all";
+type ProviderFilter = "all" | "claude" | "codex" | "unknown";
 type ViewMode = "chart" | "table";
+
+const PROVIDER_LABELS: Record<ProviderFilter, string> = {
+  all: "All Providers",
+  claude: "Claude",
+  codex: "Codex (GPT/o3/o4)",
+  unknown: "Unknown",
+};
 
 export default function TokensPage() {
   const [data, setData] = useState<TokensData | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<TimeRange>("14d");
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("chart");
   const [tablePage, setTablePage] = useState(0);
   const TABLE_PAGE_SIZE = 10;
   const { toast } = useToast();
 
   useEffect(() => {
-    fetch("/api/tokens").then(r => r.json()).then((d: TokensData) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    const params = providerFilter !== "all" ? `?provider=${providerFilter}` : "";
+    fetch(`/api/tokens${params}`).then(r => r.json()).then((d: TokensData) => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+  }, [providerFilter]);
 
   const handleExport = (type: "detail" | "summary") => {
     const url = `/api/tokens/export?type=${type}`;
@@ -231,7 +242,21 @@ export default function TokensPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Token Usage & Cost</h1>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {/* Provider Filter */}
+          <div className="flex border rounded-md">
+            {(["all", "claude", "codex", "unknown"] as ProviderFilter[]).map((p) => (
+              <Button
+                key={p}
+                variant={providerFilter === p ? "default" : "ghost"}
+                size="sm"
+                className="h-7 text-xs px-2 rounded-none first:rounded-l-md last:rounded-r-md"
+                onClick={() => { setProviderFilter(p); setTablePage(0); }}
+              >
+                {p === "all" ? "All" : p === "codex" ? "Codex" : p === "claude" ? "Claude" : "Unknown"}
+              </Button>
+            ))}
+          </div>
           <Button variant="outline" size="sm" onClick={() => handleExport("detail")}>
             <Download className="h-4 w-4 mr-2" />
             Export Detail CSV

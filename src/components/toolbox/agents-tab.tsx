@@ -12,9 +12,13 @@ import {
 } from "@/lib/tools-registry";
 import {
   Bot, Info, Plus, Pencil, Trash2, AlertCircle, X,
-  ShoppingBag, Search, CheckCircle,
+  ShoppingBag, Search, CheckCircle, Play,
+  Globe, Star, RefreshCw, User,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { OnlineSearch } from "./online-search";
+import { useCommunityTemplates } from "@/hooks/use-community-templates";
+import type { RemoteTemplate } from "@/lib/remote-registry";
 import type { AgentInfo } from "./types";
 
 interface AgentsTabProps {
@@ -25,6 +29,7 @@ interface AgentsTabProps {
 
 export function AgentsTab({ agents, onRefresh, AgentDialog }: AgentsTabProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"add" | "edit">("add");
   const [editingAgent, setEditingAgent] = useState<AgentInfo | null>(null);
@@ -34,6 +39,9 @@ export function AgentsTab({ agents, onRefresh, AgentDialog }: AgentsTabProps) {
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [installing, setInstalling] = useState<string | null>(null);
+
+  const community = useCommunityTemplates();
+  const [communitySearchQuery, setCommunitySearchQuery] = useState("");
 
   const handleAddAgent = () => {
     setDialogMode("add");
@@ -117,6 +125,36 @@ export function AgentsTab({ agents, onRefresh, AgentDialog }: AgentsTabProps) {
     }
   };
 
+  const handleInstallCommunity = async (template: RemoteTemplate) => {
+    setInstalling(template.name);
+    try {
+      const res = await fetch("/api/toolbox/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: template.name, content: template.content }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(data.message || "Community agent installed successfully", "success");
+        onRefresh();
+      } else {
+        toast(data.error || "Installation failed", "error");
+      }
+    } catch {
+      toast("Failed to install community agent", "error");
+    } finally {
+      setInstalling(null);
+    }
+  };
+
+  const filteredCommunityAgents = community.agents.filter((t) => {
+    if (!communitySearchQuery) return true;
+    const q = communitySearchQuery.toLowerCase();
+    return t.name.toLowerCase().includes(q) ||
+      t.description.toLowerCase().includes(q) ||
+      t.author.toLowerCase().includes(q);
+  });
+
   if (agents.length === 0 && filteredTemplates.length === 0) {
     return (
       <>
@@ -172,11 +210,25 @@ export function AgentsTab({ agents, onRefresh, AgentDialog }: AgentsTabProps) {
                         <div className="flex items-start gap-2 min-w-0">
                           <div className="h-7 w-7 rounded-md bg-pink-500/10 flex items-center justify-center flex-shrink-0"><Bot className="h-3.5 w-3.5 text-pink-500" /></div>
                           <div className="min-w-0">
-                            <CardTitle className="text-sm font-mono truncate">{agent.name}</CardTitle>
+                            <div className="flex items-center gap-1.5">
+                              <CardTitle className="text-sm font-mono truncate">{agent.name}</CardTitle>
+                              {agent.provider === "codex" && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex-shrink-0">Codex</span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{agent.description}</p>
                           </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                            title="Run in Chat"
+                            onClick={(e) => { e.stopPropagation(); router.push(`/chat?run=${encodeURIComponent(`@${agent.name}`)}`); }}
+                          >
+                            <Play className="h-3 w-3" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -290,6 +342,110 @@ export function AgentsTab({ agents, onRefresh, AgentDialog }: AgentsTabProps) {
                 );
               })}
             </div>
+          )}
+        </section>
+
+        {/* Community Templates */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-teal-500" />
+              <span className="text-sm font-semibold">Community Templates</span>
+              {!community.loading && !community.error && (
+                <Badge variant="outline" className="text-xs">{community.agents.length}</Badge>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={community.refresh}
+              title="Refresh community templates"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${community.loading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+
+          {community.loading ? (
+            <Card className="border-dashed">
+              <CardContent className="py-6 text-center">
+                <RefreshCw className="h-5 w-5 mx-auto mb-2 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading community templates...</p>
+              </CardContent>
+            </Card>
+          ) : community.error ? (
+            <Card className="border-dashed">
+              <CardContent className="py-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Could not load community templates. Showing local templates only.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {community.agents.length > 0 && (
+                <div className="relative mb-3 max-w-xs">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search community agents..."
+                    className="w-full h-7 pl-7 pr-2 text-xs border rounded-md bg-background"
+                    value={communitySearchQuery}
+                    onChange={(e) => setCommunitySearchQuery(e.target.value)}
+                  />
+                </div>
+              )}
+              {filteredCommunityAgents.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="py-6 text-center">
+                    <p className="text-sm text-muted-foreground">No community agent templates found</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {filteredCommunityAgents.map((template) => {
+                    const isInstalled = installedNames.has(template.name);
+                    return (
+                      <Card key={template.name} className="group hover:shadow-md transition-shadow">
+                        <CardContent className="pt-4 pb-3 px-4 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-mono font-semibold truncate">{template.name}</h3>
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{template.description}</p>
+                            </div>
+                            <Badge variant="secondary" className="text-[10px] flex-shrink-0">{template.category}</Badge>
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center gap-3">
+                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <User className="h-2.5 w-2.5" /> {template.author}
+                              </span>
+                              <span className="flex items-center gap-1 text-[10px] text-amber-500">
+                                <Star className="h-2.5 w-2.5" /> {template.stars}
+                              </span>
+                              {isInstalled && (
+                                <Badge variant="outline" className="text-[10px] text-green-600 dark:text-green-400">
+                                  <CheckCircle className="h-2.5 w-2.5 mr-1" /> Installed
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={isInstalled ? "outline" : "default"}
+                              className="h-7 text-xs"
+                              onClick={() => handleInstallCommunity(template)}
+                              disabled={isInstalled || installing === template.name}
+                            >
+                              {installing === template.name ? "Installing..." : isInstalled ? "Reinstall" : "Install"}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </section>
 

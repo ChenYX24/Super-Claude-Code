@@ -14,18 +14,22 @@ import {
 } from "@/components/ui/select";
 import {
   FolderOpen, Hash, RefreshCw, DollarSign, Clock, LayoutGrid, List,
-  Search, ArrowUpDown, X, Star, Calendar, Cpu,
+  Search, ArrowUpDown, X, Star, Calendar, Cpu, MessageSquare, Pin, Globe,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { fmtCost, fmtTokens, timeAgo, formatDT, shortModel } from "@/lib/format-utils";
 import { SessionBlock, StatusLegend, STATUS_CONFIG, highlightText } from "./session-block";
-import type { SessionsData, SessionStatus } from "./types";
+import type { SessionsData, SessionStatus, SessionProvider } from "./types";
 import { useFavorites } from "@/hooks/use-favorites";
+import { useSessionMeta } from "@/hooks/use-session-meta";
+import { SessionActions, getTagColor } from "./session-actions";
 
 const PAGE_SIZE = 24;
 
 type DateRange = "all" | "today" | "week" | "month";
 type ModelFilter = "all" | "opus" | "sonnet" | "haiku";
 type SortBy = "date" | "cost" | "messages" | "tokens";
+type ProviderFilter = "all" | "claude" | "codex";
 
 export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   data: SessionsData;
@@ -33,6 +37,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   onRefresh?: () => void;
   refreshing?: boolean;
 }) {
+  const router = useRouter();
   const [filter, setFilter] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
@@ -42,7 +47,9 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange>("all");
   const [modelFilter, setModelFilter] = useState<ModelFilter>("all");
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
   const { favorites, isFavorite, toggleFavorite } = useFavorites();
+  const { getMeta, updateMeta, metaMap } = useSessionMeta();
 
   // Debounce search input
   useEffect(() => {
@@ -52,7 +59,12 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
 
   // Filter and sort sessions
   const sessions = useMemo(() => {
-    let filtered = filter ? data.recentSessions.filter(s => s.project === filter) : data.recentSessions;
+    // Filter out soft-deleted sessions
+    let filtered = data.recentSessions.filter(s => !getMeta(s.id).deleted);
+
+    if (filter) {
+      filtered = filtered.filter(s => s.project === filter);
+    }
 
     // Apply favorites filter
     if (showFavoritesOnly) {
@@ -76,18 +88,28 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
       });
     }
 
-    // Apply search filter
-    if (debouncedSearch.trim()) {
-      const search = debouncedSearch.toLowerCase();
-      filtered = filtered.filter(s =>
-        (s.firstMessage?.toLowerCase().includes(search)) ||
-        (s.projectName.toLowerCase().includes(search)) ||
-        (s.model?.toLowerCase().includes(search)) ||
-        (s.id.toLowerCase().includes(search))
-      );
+    // Apply provider filter
+    if (providerFilter !== "all") {
+      filtered = filtered.filter(s => s.provider === providerFilter);
     }
 
-    // Apply sorting
+    // Apply search filter (also search display names and tags)
+    if (debouncedSearch.trim()) {
+      const search = debouncedSearch.toLowerCase();
+      filtered = filtered.filter(s => {
+        const meta = getMeta(s.id);
+        return (
+          (s.firstMessage?.toLowerCase().includes(search)) ||
+          (s.projectName.toLowerCase().includes(search)) ||
+          (s.model?.toLowerCase().includes(search)) ||
+          (s.id.toLowerCase().includes(search)) ||
+          (meta.displayName?.toLowerCase().includes(search)) ||
+          (meta.tags.some(t => t.toLowerCase().includes(search)))
+        );
+      });
+    }
+
+    // Apply sorting — pinned sessions always at top
     const sorted = [...filtered];
     if (sortBy === "date") {
       sorted.sort((a, b) => b.lastActive - a.lastActive);
@@ -99,8 +121,15 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
       sorted.sort((a, b) => (b.totalInputTokens + b.totalOutputTokens) - (a.totalInputTokens + a.totalOutputTokens));
     }
 
+    // Pinned sessions float to top
+    sorted.sort((a, b) => {
+      const aPinned = getMeta(a.id).pinned ? 1 : 0;
+      const bPinned = getMeta(b.id).pinned ? 1 : 0;
+      return bPinned - aPinned;
+    });
+
     return sorted;
-  }, [data.recentSessions, filter, debouncedSearch, sortBy, showFavoritesOnly, favorites, dateRange, modelFilter]);
+  }, [data.recentSessions, filter, debouncedSearch, sortBy, showFavoritesOnly, favorites, dateRange, modelFilter, providerFilter, metaMap, getMeta]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
@@ -108,7 +137,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
   const paginatedSessions = sessions.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
 
   // Reset page when filter/search changes
-  useEffect(() => { setCurrentPage(1); }, [filter, debouncedSearch, sortBy, showFavoritesOnly, dateRange, modelFilter]);
+  useEffect(() => { setCurrentPage(1); }, [filter, debouncedSearch, sortBy, showFavoritesOnly, dateRange, modelFilter, providerFilter]);
 
   return (
     <div className="space-y-5">
@@ -143,7 +172,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         {[
           { icon: FolderOpen, label: "Projects", value: data.projects.length },
           { icon: Hash, label: "Sessions", value: data.totalSessions },
@@ -236,7 +265,22 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
             </Button>
           ))}
         </div>
-        {(dateRange !== "all" || modelFilter !== "all") && (
+        <div className="flex items-center gap-1 border rounded-lg p-0.5">
+          <Globe className="h-3.5 w-3.5 text-muted-foreground ml-1.5" />
+          {(["all", "claude", "codex"] as ProviderFilter[]).map((provider) => (
+            <Button
+              key={provider}
+              variant={providerFilter === provider ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setProviderFilter(provider)}
+            >
+              {provider === "all" ? "All Providers" :
+               provider.charAt(0).toUpperCase() + provider.slice(1)}
+            </Button>
+          ))}
+        </div>
+        {(dateRange !== "all" || modelFilter !== "all" || providerFilter !== "all") && (
           <Button
             variant="ghost"
             size="sm"
@@ -244,6 +288,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
             onClick={() => {
               setDateRange("all");
               setModelFilter("all");
+              setProviderFilter("all");
             }}
           >
             <X className="h-3 w-3 mr-1" />
@@ -266,7 +311,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
       </div>
 
       {viewMode === "grid" ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
           {paginatedSessions.map(s => (
             <SessionBlock
               key={`${s.project}-${s.id}`}
@@ -275,6 +320,9 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
               searchQuery={debouncedSearch}
               isFavorite={isFavorite(s.id)}
               onToggleFavorite={toggleFavorite}
+              onOpenInChat={(project, id) => router.push(`/chat?session=${encodeURIComponent(project)}|${id}`)}
+              meta={getMeta(s.id)}
+              onUpdateMeta={updateMeta}
             />
           ))}
         </div>
@@ -283,6 +331,9 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
           {paginatedSessions.map(s => {
             const status = (s.status || "idle") as SessionStatus;
             const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
+            const meta = getMeta(s.id);
+            const displayName = meta.displayName || s.firstMessage || s.id.slice(0, 12);
+            const tags = meta.tags || [];
             return (
               <Card key={`${s.project}-${s.id}`} className="cursor-pointer hover:shadow-md hover:border-primary/40 transition-all"
                 onClick={() => onSelect(s.project, s.id)}>
@@ -300,14 +351,19 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
                   >
                     <Star className="h-3.5 w-3.5" fill={isFavorite(s.id) ? "currentColor" : "none"} />
                   </button>
+                  {meta.pinned && <Pin className="h-3.5 w-3.5 text-primary/60 flex-shrink-0" />}
                   <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${cfg.dot} ${cfg.animation || ""}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium truncate">
-                      {debouncedSearch ? highlightText(s.firstMessage || s.id.slice(0, 12), debouncedSearch) :
-                       (s.firstMessage || s.id.slice(0, 12))}
+                      {debouncedSearch ? highlightText(displayName, debouncedSearch) : displayName}
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatDT(s.startTime)} · {timeAgo(s.lastActive)} · {debouncedSearch ? highlightText(s.projectName, debouncedSearch) : s.projectName}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span>{formatDT(s.startTime)} · {timeAgo(s.lastActive)} · {debouncedSearch ? highlightText(s.projectName, debouncedSearch) : s.projectName}</span>
+                      {tags.map((tag) => (
+                        <span key={tag} className={`text-[10px] px-1 py-0 rounded border ${getTagColor(tag)}`}>
+                          {tag}
+                        </span>
+                      ))}
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -316,6 +372,18 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
                       <DollarSign className="h-3 w-3 mr-0.5" />{fmtCost(s.estimatedCost)}
                     </Badge>
                     <Badge variant="outline" className="text-xs">{s.messageCount} msgs</Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={(e) => { e.stopPropagation(); router.push(`/chat?session=${encodeURIComponent(s.project)}|${s.id}`); }}
+                      title="Open in Chat"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                    </Button>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <SessionActions sessionId={s.id} meta={meta} onUpdate={updateMeta} />
+                    </div>
                   </div>
                 </CardContent>
               </Card>

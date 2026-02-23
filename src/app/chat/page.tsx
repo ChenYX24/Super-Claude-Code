@@ -1,19 +1,25 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConvMessage } from "@/components/sessions/conv-message";
 import { ChatSidebar } from "@/components/chat/chat-sidebar";
+import { LiveAssistantMessage } from "@/components/chat/live-assistant-message";
+import { ChatStatusBar } from "@/components/chat/chat-status-bar";
+import { ChatWorkspaceBar } from "@/components/chat/chat-workspace-bar";
+import { SplitView } from "@/components/chat/split-view";
 import { MarkdownContent } from "@/components/markdown-content";
 import { useToast } from "@/components/toast";
-import type { SessionInfo, SessionDetail, SessionMessage } from "@/components/sessions/types";
+import { useChatStream } from "@/hooks/use-chat-stream";
+import type { LiveChatMessage, PermissionMode } from "@/lib/chat-types";
+import type { SessionInfo, SessionDetail } from "@/components/sessions/types";
 import {
   ArrowDown, MessageCircle, Search, X, ChevronsUp, ChevronsDown,
-  Wrench, Download, RefreshCw, DollarSign, Send, Bot, User, Loader2,
-  Terminal,
+  Wrench, Download, RefreshCw, DollarSign, Send, User, Loader2,
+  Terminal, ExternalLink, FileUp, Copy, Check,
 } from "lucide-react";
 import { shortModel, fmtTokens, fmtCost } from "@/lib/format-utils";
 import { ChatCommandMenu } from "@/components/chat/chat-command-menu";
@@ -22,19 +28,9 @@ import {
 } from "@/lib/chat-commands";
 import type { ChatCommand } from "@/lib/chat-commands";
 
-// Chat message for live conversation (not from session)
-interface ChatMsg {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: number;
-  loading?: boolean;
-  cost?: number;
-  durationMs?: number;
-}
-
 function ChatPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { toast } = useToast();
 
   // Session viewer state
@@ -50,10 +46,8 @@ function ChatPageContent() {
   const [convSearch, setConvSearch] = useState("");
   const [convSearchMatch, setConvSearchMatch] = useState(0);
 
-  // Live chat state
-  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  // Live chat state (via streaming hook)
   const [chatInput, setChatInput] = useState("");
-  const [chatSending, setChatSending] = useState(false);
   const [chatMode, setChatMode] = useState<"session" | "chat">("session");
   const [claudeSessionId, setClaudeSessionId] = useState<string>("");
 
@@ -61,9 +55,42 @@ function ChatPageContent() {
   const [cliSlashCommands, setCliSlashCommands] = useState<{ name: string; description?: string }[]>([]);
   const [cliModel, setCliModel] = useState<string>("");
 
+  // Workspace settings (cwd + permission mode)
+  const [chatCwd, setChatCwd] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem("chat-cwd") || "" : ""
+  );
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(() =>
+    ((typeof window !== "undefined" ? localStorage.getItem("chat-permission-mode") : null) as PermissionMode) || "default"
+  );
+  const [chatProvider, setChatProvider] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem("chat-provider") || "claude" : "claude"
+  );
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareRightProvider, setCompareRightProvider] = useState<string>(() =>
+    typeof window !== "undefined" ? localStorage.getItem("chat-compare-right") || "codex" : "codex"
+  );
+
+  // Streaming hook
+  const {
+    messages: chatMessages, setMessages: setChatMessages,
+    sending: chatSending, currentPhase, elapsedMs,
+    send: chatSend, cancel: chatCancel, clearMessages,
+  } = useChatStream({
+    onSessionId: setClaudeSessionId,
+    onModel: setCliModel,
+    onSlashCommands: setCliSlashCommands,
+  });
+
   // Command menu state
   const [cmdMenuIndex, setCmdMenuIndex] = useState(0);
   const [cmdMenuDismissed, setCmdMenuDismissed] = useState(false);
+
+  // Copy ID state
+  const [idCopied, setIdCopied] = useState(false);
+
+  // Drag-and-drop state
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounterRef = useRef(0);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -82,6 +109,7 @@ function ChatPageContent() {
       setChatMode("session");
     }
   }, [searchParams, selectedSessionKey]);
+
 
   // Fetch sessions list
   useEffect(() => {
@@ -103,8 +131,8 @@ function ChatPageContent() {
   useEffect(() => {
     if (!selectedSessionKey) return;
     setChatMode("session");
-    setChatMessages([]); // clear continuation messages from previous session
-    setClaudeSessionId(""); // reset live session tracking
+    clearMessages();
+    setClaudeSessionId("");
 
     const fetchDetail = async () => {
       setLoading(true);
@@ -129,7 +157,7 @@ function ChatPageContent() {
     };
 
     fetchDetail();
-  }, [selectedSessionKey]);
+  }, [selectedSessionKey, clearMessages]);
 
   // Auto-refresh for active sessions
   useEffect(() => {
@@ -257,168 +285,118 @@ function ChatPageContent() {
   // Reset command menu index and dismissed state when input changes
   useEffect(() => { setCmdMenuIndex(0); setCmdMenuDismissed(false); }, [chatInput]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [chatInput]);
+
+  // Drag-and-drop handlers
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current += 1;
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragging(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current -= 1;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    const fileRefs = files.map((f) => `[File: ${f.name}]`).join(" ");
+    setChatInput((prev) => (prev ? `${prev} ${fileRefs}` : fileRefs));
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
   // Execute built-in commands locally
   const executeBuiltinCommand = useCallback((name: string) => {
+    const makeMsg = (content: string): LiveChatMessage => ({
+      id: crypto.randomUUID(),
+      role: "assistant",
+      text: content,
+      thinkingContent: "",
+      toolCalls: [],
+      timestamp: Date.now(),
+      phase: "complete",
+    });
+
     switch (name) {
       case "/help": {
         const lines = allCommands.map((c) => `\`${c.name}\` — ${c.description}`).join("\n");
-        setChatMessages((prev) => [...prev, {
-          id: crypto.randomUUID(), role: "assistant",
-          content: `**Available Commands**\n\n${lines}`, timestamp: Date.now(),
-        }]);
+        setChatMessages((prev) => [...prev, makeMsg(`**Available Commands**\n\n${lines}`)]);
         break;
       }
       case "/clear":
-        setChatMessages([]);
+        clearMessages();
         toast("Conversation cleared");
         break;
       case "/model": {
         const model = cliModel || "Unknown (send a message first to detect)";
-        setChatMessages((prev) => [...prev, {
-          id: crypto.randomUUID(), role: "assistant",
-          content: `**Current Model:** ${model}`, timestamp: Date.now(),
-        }]);
+        setChatMessages((prev) => [...prev, makeMsg(`**Current Model:** ${model}`)]);
         break;
       }
       case "/cost": {
         setChatMessages((prev) => {
           const total = prev.filter((m) => m.cost != null).reduce((s, m) => s + (m.cost ?? 0), 0);
-          return [...prev, {
-            id: crypto.randomUUID(), role: "assistant",
-            content: `**Session Cost:** $${total.toFixed(4)}\n**Messages:** ${prev.length}`,
-            timestamp: Date.now(),
-          }];
+          return [...prev, makeMsg(`**Session Cost:** $${total.toFixed(4)}\n**Messages:** ${prev.length}`)];
         });
         break;
       }
     }
-  }, [allCommands, cliModel, toast]);
+  }, [allCommands, cliModel, toast, setChatMessages, clearMessages]);
 
   // Send chat message via Claude Code CLI (streaming)
   const handleSend = useCallback(async (overrideMessage?: string) => {
     const text = (overrideMessage ?? chatInputRef.current).trim();
     if (!text || chatSending) return;
-
-    const userMsg: ChatMsg = { id: crypto.randomUUID(), role: "user", content: text, timestamp: Date.now() };
-    const assistantMsgId = crypto.randomUUID();
-    const assistantMsg: ChatMsg = { id: assistantMsgId, role: "assistant", content: "", timestamp: Date.now(), loading: true };
-
-    setChatMessages((prev) => [...prev, userMsg, assistantMsg]);
     setChatInput("");
-    setChatSending(true);
+    await chatSend(text, {
+      sessionId: activeSessionId,
+      cwd: chatCwd || undefined,
+      permissionMode,
+      provider: chatProvider,
+    });
+  }, [chatSending, activeSessionId, chatSend, chatCwd, permissionMode, chatProvider]);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          sessionId: activeSessionId || undefined,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "Request failed" }));
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantMsgId
-              ? { ...m, content: `Error: ${err.error || "Failed to get response"}`, loading: false }
-              : m
-          )
-        );
-        return;
-      }
-
-      // Read SSE stream from Claude Code CLI
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let accumulated = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // Process complete lines
-        let idx;
-        while ((idx = buffer.indexOf("\n")) !== -1) {
-          const line = buffer.slice(0, idx).trim();
-          buffer = buffer.slice(idx + 1);
-
-          if (!line.startsWith("data: ")) continue;
-          const payload = line.slice(6);
-          if (payload === "[DONE]") continue;
-
-          try {
-            const event = JSON.parse(payload);
-
-            if (event.type === "system" && event.session_id) {
-              // Capture session ID + CLI capabilities from init event
-              setClaudeSessionId(event.session_id);
-              if (event.model) setCliModel(event.model);
-              if (event.slash_commands) setCliSlashCommands(event.slash_commands);
-            } else if (event.type === "assistant" && event.message?.content) {
-              // CLI sends complete assistant message (not token deltas)
-              const textParts = event.message.content
-                .filter((c: { type: string }) => c.type === "text")
-                .map((c: { text: string }) => c.text);
-              accumulated = textParts.join("").trim();
-              setChatMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId ? { ...m, content: accumulated, loading: false } : m
-                )
-              );
-            } else if (event.type === "result") {
-              // Final result with cost/duration metadata
-              if (event.session_id) setClaudeSessionId(event.session_id);
-              setChatMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId
-                    ? {
-                        ...m,
-                        content: accumulated || (event.result || "").trim(),
-                        loading: false,
-                        cost: event.cost_usd,
-                        durationMs: event.duration_ms,
-                      }
-                    : m
-                )
-              );
-            } else if (event.type === "error") {
-              setChatMessages((prev) =>
-                prev.map((m) =>
-                  m.id === assistantMsgId
-                    ? { ...m, content: `Error: ${event.error}`, loading: false }
-                    : m
-                )
-              );
-            }
-          } catch { /* skip malformed JSON */ }
-        }
-      }
-
-      // Ensure loading state is cleared
-      setChatMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId && m.loading
-            ? { ...m, loading: false, content: accumulated || "No response received." }
-            : m
-        )
-      );
-    } catch {
-      setChatMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantMsgId
-            ? { ...m, content: "Error: Failed to connect to Claude Code. Make sure the CLI is installed and on your PATH.", loading: false }
-            : m
-        )
-      );
-    } finally {
-      setChatSending(false);
+  // Handle ?run= parameter from Toolbox Run buttons
+  const runHandledRef = useRef(false);
+  useEffect(() => {
+    const runParam = searchParams.get("run");
+    if (runParam && !runHandledRef.current) {
+      runHandledRef.current = true;
+      setChatMode("chat");
+      setSelectedSessionKey("");
+      setSessionDetail(null);
+      setTimeout(() => {
+        setChatInput(runParam);
+        handleSend(runParam);
+      }, 200);
+      router.replace("/chat", { scroll: false });
     }
-  }, [chatSending, activeSessionId]);
+  }, [searchParams, router, handleSend]);
 
   // Handle command selection (from menu click or keyboard)
   const handleCommandSelect = useCallback((cmd: ChatCommand) => {
@@ -432,6 +410,13 @@ function ChatPageContent() {
   }, [executeBuiltinCommand, handleSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // ESC during sending → cancel takes priority
+    if (e.key === "Escape" && chatSending) {
+      e.preventDefault();
+      chatCancel();
+      return;
+    }
+
     if (showCommandMenu) {
       const flat = getFlatFilteredCommands(allCommands, chatInput);
 
@@ -468,10 +453,12 @@ function ChatPageContent() {
   const startNewChat = () => {
     setSelectedSessionKey("");
     setSessionDetail(null);
-    setChatMessages([]);
+    clearMessages();
     setChatMode("chat");
     setChatInput("");
     setClaudeSessionId("");
+    // Clear URL query params so the session deep-link effect doesn't re-select
+    router.replace("/chat", { scroll: false });
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
@@ -483,51 +470,87 @@ function ChatPageContent() {
 
   const isViewingSession = chatMode === "session" && sessionDetail;
 
+  // Last tool name for status bar
+  const lastToolName = useMemo(() => {
+    if (!chatMessages.length) return undefined;
+    const last = chatMessages[chatMessages.length - 1];
+    if (last?.role === "assistant" && last.toolCalls.length > 0) {
+      return last.toolCalls[last.toolCalls.length - 1].name;
+    }
+    return undefined;
+  }, [chatMessages]);
+
   return (
-    <div className="flex -mx-6 -mb-6 -mt-16 lg:-mt-6 h-[calc(100vh)] overflow-hidden">
-      {/* Sidebar */}
-      <ChatSidebar
-        sessions={sessions}
-        selectedKey={selectedSessionKey}
-        onSelect={setSelectedSessionKey}
-        collapsed={sidebarCollapsed}
-        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-        loading={loadingSessions}
-        onNewChat={startNewChat}
-        isChatMode={chatMode === "chat"}
-      />
+    <div className="flex -mx-3 sm:-mx-4 lg:-mx-6 -mb-3 sm:-mb-4 lg:-mb-6 -mt-14 sm:-mt-14 lg:-mt-6 h-[calc(100vh)] overflow-hidden">
+      {/* Sidebar - hidden on mobile, shown on lg+ */}
+      <div className="hidden lg:block">
+        <ChatSidebar
+          sessions={sessions}
+          selectedKey={selectedSessionKey}
+          onSelect={setSelectedSessionKey}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          loading={loadingSessions}
+          onNewChat={startNewChat}
+          isChatMode={chatMode === "chat"}
+        />
+      </div>
 
       {/* Main area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
-        <div className="border-b bg-card px-4 py-2.5 flex items-center gap-2 flex-shrink-0">
+        <div className="border-b bg-card px-3 sm:px-4 py-2.5 flex items-center gap-2 flex-shrink-0">
           {isViewingSession ? (
             <>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold truncate">{sessionDetail.projectName}</div>
-                <div className="text-xs text-muted-foreground">
-                  {sessionDetail.startTime ? new Date(sessionDetail.startTime).toLocaleString("zh-CN") : ""}
+                <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <span>{sessionDetail.startTime ? new Date(sessionDetail.startTime).toLocaleString("zh-CN") : ""}</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(sessionDetail.id);
+                      setIdCopied(true);
+                      setTimeout(() => setIdCopied(false), 1500);
+                    }}
+                    className="inline-flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    title={`Click to copy: ${sessionDetail.id}`}
+                  >
+                    {idCopied ? <Check className="h-2.5 w-2.5 text-green-500" /> : <Copy className="h-2.5 w-2.5" />}
+                    {sessionDetail.id.slice(0, 8)}...
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
                 {sessionDetail.model && (
-                  <Badge variant="secondary" className="text-xs">{shortModel(sessionDetail.model)}</Badge>
+                  <Badge variant="secondary" className="text-xs hidden sm:inline-flex">{shortModel(sessionDetail.model)}</Badge>
                 )}
                 {isSessionActive && (
                   <Button
-                    variant={autoRefresh ? "default" : "outline"} size="sm" className="text-xs h-7"
+                    variant={autoRefresh ? "default" : "outline"} size="sm" className="text-xs h-8 sm:h-7 touch-manipulation"
                     onClick={() => setAutoRefresh(!autoRefresh)}
                   >
-                    <RefreshCw className={`h-3 w-3 mr-1 ${autoRefresh ? "animate-spin" : ""}`} />Live
+                    <RefreshCw className={`h-3 w-3 sm:mr-1 ${autoRefresh ? "animate-spin" : ""}`} /><span className="hidden sm:inline">Live</span>
                   </Button>
                 )}
-                <Button variant={showTools ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => setShowTools(!showTools)}>
-                  <Wrench className="h-3 w-3 mr-1" />Tools
+                <Button variant={showTools ? "default" : "outline"} size="sm" className="text-xs h-8 sm:h-7 touch-manipulation" onClick={() => setShowTools(!showTools)}>
+                  <Wrench className="h-3 w-3 sm:mr-1" /><span className="hidden sm:inline">Tools</span>
                 </Button>
-                <Button variant="outline" size="sm" className="text-xs h-7" onClick={exportAsMarkdown}>
+                <Button variant="outline" size="sm" className="text-xs h-8 sm:h-7 hidden sm:inline-flex touch-manipulation" onClick={exportAsMarkdown}>
                   <Download className="h-3 w-3 mr-1" />Export
                 </Button>
-                <Badge variant="outline" className="text-xs font-mono">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs h-8 sm:h-7 hidden md:inline-flex touch-manipulation"
+                  onClick={() => {
+                    const [project, id] = selectedSessionKey.split("|");
+                    router.push(`/sessions?highlight=${encodeURIComponent(id)}`);
+                  }}
+                  title="View in Sessions page"
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />Sessions
+                </Button>
+                <Badge variant="outline" className="text-xs font-mono hidden sm:inline-flex">
                   <DollarSign className="h-3 w-3" />{fmtCost(sessionDetail.estimatedCost)}
                 </Badge>
               </div>
@@ -538,10 +561,25 @@ function ChatPageContent() {
               <h1 className="text-lg font-semibold">{chatMode === "chat" ? "New Chat" : "Chat"}</h1>
               <div className="flex items-center gap-1.5 ml-auto">
                 {claudeSessionId && (
-                  <Badge variant="secondary" className="text-[10px] font-mono">
-                    {claudeSessionId.slice(0, 8)}
-                  </Badge>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(claudeSessionId);
+                      setIdCopied(true);
+                      setTimeout(() => setIdCopied(false), 1500);
+                    }}
+                    className="inline-flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    title={`Click to copy: ${claudeSessionId}`}
+                  >
+                    {idCopied ? <Check className="h-2.5 w-2.5 text-green-500" /> : <Copy className="h-2.5 w-2.5" />}
+                    {claudeSessionId.slice(0, 8)}...
+                  </button>
                 )}
+                {cliModel && (
+                  <Badge variant="secondary" className="text-xs">{shortModel(cliModel)}</Badge>
+                )}
+                <Button variant={showTools ? "default" : "outline"} size="sm" className="text-xs h-7" onClick={() => setShowTools(!showTools)}>
+                  <Wrench className="h-3 w-3 mr-1" />Tools
+                </Button>
                 {chatMessages.length > 0 && (
                   <Badge variant="outline" className="text-xs">{chatMessages.length} messages</Badge>
                 )}
@@ -582,8 +620,19 @@ function ChatPageContent() {
           </div>
         )}
 
+        {/* Split view (compare mode) */}
+        {compareMode && chatMode === "chat" && (
+          <SplitView
+            leftProvider={chatProvider}
+            rightProvider={compareRightProvider}
+            cwd={chatCwd || undefined}
+            permissionMode={permissionMode}
+            showTools={showTools}
+          />
+        )}
+
         {/* Chat area */}
-        <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto relative">
+        {!compareMode && <div ref={chatContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto relative">
           {/* Session loading */}
           {loading && (
             <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
@@ -666,49 +715,40 @@ function ChatPageContent() {
 
           {/* Live chat messages (new chat or continuation of session) */}
           {chatMessages.length > 0 && (
-            <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
-              {chatMessages.map((msg) => (
-                <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className={`flex gap-3 max-w-[85%] ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                    <div className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      msg.role === "user" ? "bg-blue-100 dark:bg-blue-900" : "bg-purple-100 dark:bg-purple-900"
-                    }`}>
-                      {msg.role === "user"
-                        ? <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                        : <Bot className="h-4 w-4 text-purple-600 dark:text-purple-400" />}
+            <div className="divide-y divide-border/30">
+              {chatMessages.map((msg) =>
+                msg.role === "user" ? (
+                  <div key={msg.id} className="flex gap-3 py-3 px-4 bg-blue-50/50 dark:bg-blue-950/20">
+                    <div className="h-7 w-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 bg-blue-100 dark:bg-blue-900">
+                      <User className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className={`flex items-center gap-2 mb-1 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                        <span className="text-xs font-semibold">{msg.role === "user" ? "You" : "Claude"}</span>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold">You</span>
                         <span className="text-xs text-muted-foreground">
                           {new Date(msg.timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
-                      <div className={`rounded-2xl px-4 py-3 ${
-                        msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-                      }`}>
-                        {msg.loading ? (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span>Claude Code is working...</span>
-                          </div>
-                        ) : (
-                          <MarkdownContent content={msg.content} className="text-sm" />
-                        )}
-                      </div>
-                      {msg.role === "assistant" && !msg.loading && (msg.cost != null && msg.cost > 0) && (
-                        <div className="text-[10px] text-muted-foreground mt-1 font-mono flex items-center gap-2">
-                          <span>${msg.cost.toFixed(4)}</span>
-                          {msg.durationMs != null && <span>{(msg.durationMs / 1000).toFixed(1)}s</span>}
-                        </div>
-                      )}
+                      <MarkdownContent content={msg.text} className="text-sm" />
                     </div>
                   </div>
-                </div>
-              ))}
+                ) : (
+                  <LiveAssistantMessage key={msg.id} message={msg} showTools={showTools} />
+                )
+              )}
             </div>
           )}
-        </div>
+        </div>}
+
+        {/* Streaming status bar */}
+        {!compareMode && chatSending && currentPhase && currentPhase !== "complete" && (
+          <ChatStatusBar
+            phase={currentPhase}
+            elapsedMs={elapsedMs}
+            toolName={lastToolName}
+            onCancel={chatCancel}
+          />
+        )}
 
         {/* Status bar (session mode) */}
         {isViewingSession && (
@@ -720,9 +760,37 @@ function ChatPageContent() {
           </div>
         )}
 
-        {/* Chat input — always visible */}
-        {!loading && (
-          <div className="border-t bg-card px-4 py-3 flex-shrink-0">
+        {/* Workspace settings bar (always visible so permission mode can be switched anytime) */}
+        <ChatWorkspaceBar
+          cwd={chatCwd}
+          onCwdChange={(p) => { setChatCwd(p); localStorage.setItem("chat-cwd", p); }}
+          permissionMode={permissionMode}
+          onPermissionModeChange={(m) => { setPermissionMode(m); localStorage.setItem("chat-permission-mode", m); }}
+          provider={chatProvider}
+          onProviderChange={(p) => { setChatProvider(p); localStorage.setItem("chat-provider", p); }}
+          compareMode={compareMode}
+          onCompareModeChange={setCompareMode}
+          disabled={chatSending}
+        />
+
+        {/* Chat input — visible when not in compare mode */}
+        {!loading && !compareMode && (
+          <div
+            className="border-t bg-card px-4 py-3 flex-shrink-0 relative"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+          >
+            {/* Drag-and-drop overlay */}
+            {isDragging && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary/50 rounded-lg pointer-events-none">
+                <div className="flex items-center gap-2 text-primary font-medium">
+                  <FileUp className="h-5 w-5" />
+                  <span>Drop files here</span>
+                </div>
+              </div>
+            )}
             <div className="max-w-4xl mx-auto relative">
               {/* Slash command menu */}
               {showCommandMenu && (
@@ -740,9 +808,9 @@ function ChatPageContent() {
                   onChange={(e) => setChatInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={isViewingSession
-                    ? "Continue this session... (/ for commands)"
-                    : "Message Claude Code... (/ for commands)"}
-                  className="flex-1 resize-none bg-muted rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 min-h-[44px] max-h-[120px]"
+                    ? "Continue this session... (Shift+Enter for newline, / for commands)"
+                    : "Message Claude Code... (Shift+Enter for newline, / for commands)"}
+                  className="flex-1 resize-none bg-muted rounded-xl px-3 sm:px-4 py-3 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 min-h-[44px] max-h-[200px] touch-manipulation"
                   rows={1}
                   disabled={chatSending}
                   role="combobox"
@@ -751,11 +819,12 @@ function ChatPageContent() {
                   aria-activedescendant={showCommandMenu ? `cmd-item-${cmdMenuIndex}` : undefined}
                 />
                 <Button
-                  onClick={() => handleSend()}
-                  disabled={!chatInput.trim() || chatSending}
-                  className="h-11 w-11 rounded-xl p-0 flex-shrink-0"
+                  onClick={() => chatSending ? chatCancel() : handleSend()}
+                  disabled={!chatSending && !chatInput.trim()}
+                  className="h-11 w-11 rounded-xl p-0 flex-shrink-0 touch-manipulation"
+                  variant={chatSending ? "destructive" : "default"}
                 >
-                  {chatSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {chatSending ? <X className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                 </Button>
               </div>
             </div>

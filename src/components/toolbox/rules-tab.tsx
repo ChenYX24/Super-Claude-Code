@@ -201,7 +201,12 @@ export function RulesTab({ rules, onRefresh, RuleDialog }: RulesTabProps) {
                                 <div className="flex items-start gap-2 min-w-0">
                                   <div className="h-7 w-7 rounded-md bg-cyan-500/10 flex items-center justify-center flex-shrink-0"><BookOpen className="h-3.5 w-3.5 text-cyan-500" /></div>
                                   <div className="min-w-0">
-                                    <CardTitle className="text-sm font-mono truncate">{rule.name}</CardTitle>
+                                    <div className="flex items-center gap-1.5">
+                                      <CardTitle className="text-sm font-mono truncate">{rule.name}</CardTitle>
+                                      {rule.provider === "codex" && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex-shrink-0">Codex</span>
+                                      )}
+                                    </div>
                                     {subtitle && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{subtitle}</p>}
                                   </div>
                                 </div>

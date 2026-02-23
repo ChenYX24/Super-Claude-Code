@@ -278,9 +278,9 @@ export default function EditorPage() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="mb-4">
-        <h1 className="text-2xl font-bold mb-2">CLAUDE.md Editor</h1>
+        <h1 className="text-2xl font-bold mb-2">Instructions Editor</h1>
         <p className="text-sm text-muted-foreground mb-4">
-          Edit global and project-level CLAUDE.md files
+          Edit CLAUDE.md and AGENTS.md instruction files
         </p>
 
         <div className="flex items-center gap-3">
@@ -289,7 +289,7 @@ export default function EditorPage() {
             onChange={(e) => setSelectedFile(e.target.value)}
             className="px-3 py-2 border rounded-md bg-background text-sm cursor-pointer"
           >
-            {files.length === 0 && <option value="">No CLAUDE.md files</option>}
+            {files.length === 0 && <option value="">No instruction files found</option>}
             {files.map((file) => (
               <option key={file.path} value={file.path}>{file.label}</option>
             ))}

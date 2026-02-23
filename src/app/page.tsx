@@ -16,6 +16,8 @@ import { useFavorites } from "@/hooks/use-favorites";
 
 // ---- Types ----
 
+type ProviderFilter = "all" | "claude" | "codex";
+
 interface TeamSummary {
   teams: {
     name: string;
@@ -45,6 +47,7 @@ interface SessionInfo {
   messageCount: number;
   firstMessage?: string;
   model?: string;
+  provider?: "claude" | "codex" | "unknown";
   totalInputTokens: number;
   totalOutputTokens: number;
   estimatedCost: number;
@@ -94,6 +97,7 @@ export default function HomePage() {
   const [sessions, setSessions] = useState<SessionsData | null>(null);
   const [tokensData, setTokensData] = useState<TokensData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
   const { isFavorite } = useFavorites();
 
   useEffect(() => {
@@ -110,10 +114,16 @@ export default function HomePage() {
   const totalTasks = teams?.teams.reduce((s, t) => s + t.taskCount, 0) || 0;
   const completedTasks = teams?.teams.reduce((s, t) => s + t.completedTasks, 0) || 0;
 
-  const recentSessions = sessions?.recentSessions.slice(0, 5) || [];
-  const totalCost = sessions?.recentSessions.reduce((s, x) => s + x.estimatedCost, 0) || 0;
-  const totalInputTokens = sessions?.recentSessions.reduce((s, x) => s + x.totalInputTokens, 0) || 0;
-  const totalOutputTokens = sessions?.recentSessions.reduce((s, x) => s + x.totalOutputTokens, 0) || 0;
+  // Apply provider filter to sessions
+  const allSessions = sessions?.recentSessions || [];
+  const filteredSessions = providerFilter === "all"
+    ? allSessions
+    : allSessions.filter((s) => s.provider === providerFilter);
+
+  const recentSessions = filteredSessions.slice(0, 5);
+  const totalCost = filteredSessions.reduce((s, x) => s + x.estimatedCost, 0);
+  const totalInputTokens = filteredSessions.reduce((s, x) => s + x.totalInputTokens, 0);
+  const totalOutputTokens = filteredSessions.reduce((s, x) => s + x.totalOutputTokens, 0);
 
   // Prepare sparkline data (last 7 days)
   const sparklineData = tokensData
@@ -227,7 +237,24 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Overview</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Overview</h1>
+        <div className="flex items-center gap-1 bg-muted/50 rounded-full p-0.5">
+          {(["all", "claude", "codex"] as const).map((opt) => (
+            <button
+              key={opt}
+              onClick={() => setProviderFilter(opt)}
+              className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                providerFilter === opt
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {opt === "all" ? "All" : opt === "claude" ? "Claude" : "Codex"}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -347,7 +374,7 @@ export default function HomePage() {
               </div>
               <div className="text-center">
                 <div className="text-xs text-muted-foreground mb-1">Total Sessions</div>
-                <div className="text-lg font-bold font-mono">{sessions?.totalSessions || 0}</div>
+                <div className="text-lg font-bold font-mono">{filteredSessions.length}</div>
               </div>
             </div>
             {sparklineData.length > 0 && (

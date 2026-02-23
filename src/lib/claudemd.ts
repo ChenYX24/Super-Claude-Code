@@ -7,8 +7,12 @@ import path from "path";
 import os from "os";
 
 const CLAUDE_DIR = path.join(os.homedir(), ".claude");
+const CODEX_DIR = path.join(os.homedir(), ".codex");
 const PROJECTS_DIR = path.join(CLAUDE_DIR, "projects");
 const REGISTRY_FILE = path.join(CLAUDE_DIR, "claudemd-registry.json");
+
+/** Allowed instruction file names */
+const INSTRUCTION_FILES = new Set(["CLAUDE.md", "AGENTS.md"]);
 
 // ---- Types ----
 
@@ -81,8 +85,15 @@ export function listClaudeMdFiles(): ClaudeMdFile[] {
   // 1. 全局 CLAUDE.md
   const globalPath = path.join(CLAUDE_DIR, "CLAUDE.md");
   if (fs.existsSync(globalPath)) {
-    files.push({ path: globalPath, label: "Global", scope: "global" });
+    files.push({ path: globalPath, label: "Claude Global", scope: "global" });
     seenPaths.add(globalPath);
+  }
+
+  // 1b. 全局 AGENTS.md (Codex)
+  const codexAgentsPath = path.join(CODEX_DIR, "AGENTS.md");
+  if (fs.existsSync(codexAgentsPath)) {
+    files.push({ path: codexAgentsPath, label: "Codex Global", scope: "global" });
+    seenPaths.add(codexAgentsPath);
   }
 
   // 2. 项目级 CLAUDE.md
@@ -109,17 +120,19 @@ export function listClaudeMdFiles(): ClaudeMdFile[] {
           continue;
         }
 
-        // 方式2: 实际项目目录下的 CLAUDE.md
+        // 方式2: 实际项目目录下的 CLAUDE.md 和 AGENTS.md
         const realProjectPath = decodeProjectPath(projectDir);
         try {
-          const realClaudemd = path.join(realProjectPath, "CLAUDE.md");
-          if (fs.existsSync(realClaudemd)) {
-            files.push({
-              path: realClaudemd,
-              label: `Project: ${realProjectPath}`,
-              scope: "project",
-            });
-            seenPaths.add(realClaudemd);
+          for (const instrFile of INSTRUCTION_FILES) {
+            const realPath = path.join(realProjectPath, instrFile);
+            if (!seenPaths.has(realPath) && fs.existsSync(realPath)) {
+              files.push({
+                path: realPath,
+                label: `Project: ${realProjectPath} (${instrFile})`,
+                scope: "project",
+              });
+              seenPaths.add(realPath);
+            }
           }
         } catch {
           // skip invalid paths
@@ -157,8 +170,9 @@ export function readClaudeMdContent(filePath: string): string | null {
 }
 
 export function writeClaudeMdContent(filePath: string, content: string): boolean {
-  // 安全检查：只允许写入 CLAUDE.md 文件
-  if (!filePath.endsWith("CLAUDE.md")) return false;
+  // 安全检查：只允许写入 CLAUDE.md 或 AGENTS.md 文件
+  const fileName = path.basename(filePath);
+  if (!INSTRUCTION_FILES.has(fileName)) return false;
 
   try {
     // 确保目录存在
@@ -263,8 +277,9 @@ export function createClaudeMd(projectEncoded: string): { success: boolean; path
  * 删除 CLAUDE.md 文件
  */
 export function deleteClaudeMdFile(filePath: string): { success: boolean; error?: string } {
-  if (!filePath.endsWith("CLAUDE.md")) {
-    return { success: false, error: "Can only delete CLAUDE.md files" };
+  const fileName = path.basename(filePath);
+  if (!INSTRUCTION_FILES.has(fileName)) {
+    return { success: false, error: "Can only delete CLAUDE.md or AGENTS.md files" };
   }
   if (!fs.existsSync(filePath)) {
     return { success: false, error: "File does not exist" };
@@ -282,8 +297,9 @@ export function deleteClaudeMdFile(filePath: string): { success: boolean; error?
  * 注册一个已存在的 CLAUDE.md 文件到 registry
  */
 export function registerClaudeMdFile(filePath: string): { success: boolean; error?: string } {
-  if (!filePath.endsWith("CLAUDE.md")) {
-    return { success: false, error: "Can only register CLAUDE.md files" };
+  const fileName = path.basename(filePath);
+  if (!INSTRUCTION_FILES.has(fileName)) {
+    return { success: false, error: "Can only register CLAUDE.md or AGENTS.md files" };
   }
   if (!fs.existsSync(filePath)) {
     return { success: false, error: "File does not exist" };

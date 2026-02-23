@@ -19,13 +19,14 @@ import {
   Bell,
   DollarSign,
 } from "lucide-react";
-import type { ClaudeSettings, EnvironmentInfo } from "@/lib/settings-reader";
+import type { ClaudeSettings, CodexSettings, EnvironmentInfo } from "@/lib/settings-reader";
 import { useNotifications } from "@/hooks/use-notifications";
 
 interface SettingsResponse {
   global: ClaudeSettings;
   local: ClaudeSettings;
   merged: ClaudeSettings;
+  codex: CodexSettings | null;
   environment: EnvironmentInfo;
 }
 
@@ -479,6 +480,41 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Codex Settings */}
+      {data.codex && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              Codex CLI
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <SettingRow label="Installed" value={true} type="boolean" />
+            {data.codex.sandbox && (
+              <SettingRow label="Sandbox" value={String(data.codex.sandbox)} />
+            )}
+            {data.codex.projects.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground">Trusted Projects</div>
+                <div className="space-y-1">
+                  {data.codex.projects.map((p) => (
+                    <div key={p.path} className="flex items-center gap-2">
+                      <Badge variant={p.trust_level === "trusted" ? "default" : "secondary"} className="text-xs">
+                        {p.trust_level}
+                      </Badge>
+                      <code className="text-xs bg-muted px-2 py-0.5 rounded truncate max-w-md">
+                        {p.path}
+                      </code>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Environment */}
       <Card>
         <CardHeader>
@@ -492,6 +528,7 @@ export default function SettingsPage() {
           <SettingRow label="Node Version" value={environment.nodeVersion} />
           <SettingRow label="Home Directory" value={environment.homeDir} />
           <SettingRow label="Claude Directory" value={environment.claudeDir} />
+          <SettingRow label="Codex Installed" value={environment.codexInstalled} type="boolean" />
           <SettingRow
             label="API Key Configured"
             value={environment.hasApiKey}
@@ -555,6 +592,20 @@ export default function SettingsPage() {
               </pre>
             </CardContent>
           </Card>
+          {data.codex && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">
+                  Codex (~/.codex/config.toml)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="text-xs bg-muted p-3 rounded overflow-auto max-h-96">
+                  {JSON.stringify(data.codex, null, 2)}
+                </pre>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </details>
     </div>

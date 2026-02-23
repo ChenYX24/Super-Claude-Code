@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "updated": "2026-02-23",
+  "skills": [
+    {
+      "name": "git-commit-helper",
+      "description": "Generate well-structured conventional commits with scope and breaking change detection",
+      "category": "Development",
+      "author": "community",
+      "stars": 42,
+      "content": "---\nname: git-commit-helper\ndescription: Generate conventional commit messages\n---\n\n# Git Commit Helper\n\n## When to Use\nBefore every commit, analyze staged changes and generate a commit message.\n\n## Format\n<type>(<scope>): <description>\n\n[optional body]\n\n[optional breaking change footer]\n\n## Types\n- feat: New feature\n- fix: Bug fix\n- refactor: Code refactoring\n- docs: Documentation\n- test: Tests\n- chore: Maintenance\n- perf: Performance improvement\n"
+    },
+    {
+      "name": "react-component-gen",
+      "description": "Scaffold React components with TypeScript, tests, and Storybook stories",
+      "category": "Development",
+      "author": "community",
+      "stars": 38,
+      "content": "---\nname: react-component-gen\ndescription: Scaffold React components with TypeScript\n---\n\n# React Component Generator\n\n## Structure\nFor each component, create:\n1. `ComponentName.tsx` - Component implementation\n2. `ComponentName.test.tsx` - Unit tests\n3. `ComponentName.stories.tsx` - Storybook stories\n4. `index.ts` - Barrel export\n\n## Conventions\n- Use functional components with hooks\n- Props interface named `ComponentNameProps`\n- Default export for the component\n- Named exports for sub-components\n"
+    },
+    {
+      "name": "db-migration-guide",
+      "description": "Database migration best practices with rollback safety checks",
+      "category": "DevOps",
+      "author": "dbteam",
+      "stars": 25,
+      "content": "---\nname: db-migration-guide\ndescription: Database migration safety guide\n---\n\n# Database Migration Guide\n\n## Before Migration\n- [ ] Backup the database\n- [ ] Test migration on staging\n- [ ] Write rollback script\n- [ ] Check for long-running locks\n\n## During Migration\n- Use transactions for DDL when supported\n- Add columns as nullable first\n- Create indexes concurrently\n- Avoid full table locks\n\n## After Migration\n- Verify data integrity\n- Check application health\n- Monitor performance for 24h\n"
+    },
+    {
+      "name": "prompt-engineer",
+      "description": "Systematic prompt engineering with evaluation and iteration patterns",
+      "category": "Quality",
+      "author": "ai-guild",
+      "stars": 56,
+      "content": "---\nname: prompt-engineer\ndescription: Systematic prompt engineering workflow\n---\n\n# Prompt Engineering Workflow\n\n## Process\n1. Define the task clearly (input/output examples)\n2. Write initial prompt with constraints\n3. Test against edge cases\n4. Iterate based on failures\n5. Document the final prompt with rationale\n\n## Techniques\n- Few-shot examples for consistent formatting\n- Chain-of-thought for reasoning tasks\n- System prompts for persona and constraints\n- Temperature tuning for creativity vs consistency\n"
+    }
+  ],
+  "agents": [
+    {
+      "name": "refactor-expert",
+      "description": "Code refactoring specialist with design pattern recommendations",
+      "category": "Quality",
+      "author": "community",
+      "stars": 35,
+      "content": "---\nname: refactor-expert\ndescription: Code refactoring specialist\nmodel: sonnet\n---\n\n# Refactoring Expert\n\nAnalyze code and suggest refactoring improvements:\n\n1. **Identify code smells**: Long methods, large classes, duplicate code\n2. **Suggest patterns**: Extract method, strategy, observer, etc.\n3. **Preserve behavior**: Ensure tests pass before and after\n4. **Incremental steps**: Small, safe refactoring moves\n\nAlways explain the \"why\" behind each refactoring suggestion.\n"
+    },
+    {
+      "name": "api-designer",
+      "description": "REST and GraphQL API design with OpenAPI spec generation",
+      "category": "Planning",
+      "author": "api-guild",
+      "stars": 29,
+      "content": "---\nname: api-designer\ndescription: API design and OpenAPI spec generator\nmodel: sonnet\n---\n\n# API Designer\n\nDesign APIs following best practices:\n\n1. **Resource modeling**: Identify entities and relationships\n2. **Endpoint design**: RESTful naming, proper HTTP methods\n3. **Schema design**: Request/response types with validation\n4. **Error handling**: Consistent error envelope\n5. **Documentation**: Generate OpenAPI 3.0 spec\n\nOutput a complete OpenAPI spec for proposed APIs.\n"
+    },
+    {
+      "name": "perf-analyzer",
+      "description": "Performance analysis and optimization recommendations",
+      "category": "Quality",
+      "author": "community",
+      "stars": 22,
+      "content": "---\nname: perf-analyzer\ndescription: Performance analysis specialist\nmodel: sonnet\n---\n\n# Performance Analyzer\n\nAnalyze code for performance issues:\n\n1. **Identify bottlenecks**: N+1 queries, unnecessary re-renders, memory leaks\n2. **Measure impact**: Estimate performance gain for each fix\n3. **Suggest optimizations**: Caching, lazy loading, memoization\n4. **Benchmark**: Provide benchmark code to verify improvements\n\nPrioritize fixes by impact-to-effort ratio.\n"
+    }
+  ]
+}

@@ -14,9 +14,13 @@ import {
 } from "@/lib/tools-registry";
 import {
   Sparkles, Command, ShoppingBag, Search, CheckCircle,
-  Plus, Pencil, Trash2, AlertCircle, X,
+  Plus, Pencil, Trash2, AlertCircle, X, Play,
+  Globe, Star, RefreshCw, User,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { OnlineSearch } from "./online-search";
+import { useCommunityTemplates } from "@/hooks/use-community-templates";
+import type { RemoteTemplate } from "@/lib/remote-registry";
 import type { SkillInfo, CommandInfo } from "./types";
 
 interface ExpandableCardProps {
@@ -61,6 +65,7 @@ interface SkillsTabProps {
 
 export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [installing, setInstalling] = useState<string | null>(null);
@@ -69,6 +74,9 @@ export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
   const [editingSkill, setEditingSkill] = useState<SkillInfo | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<SkillInfo | null>(null);
+
+  const community = useCommunityTemplates();
+  const [communitySearchQuery, setCommunitySearchQuery] = useState("");
 
   const installedNames = new Set(skills.map(s => s.name));
 
@@ -142,6 +150,36 @@ export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
     }
   };
 
+  const handleInstallCommunity = async (template: RemoteTemplate) => {
+    setInstalling(template.name);
+    try {
+      const res = await fetch("/api/toolbox/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: template.name, content: template.content }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(data.message || "Community skill installed successfully", "success");
+        onRefresh();
+      } else {
+        toast(data.error || "Installation failed", "error");
+      }
+    } catch {
+      toast("Failed to install community skill", "error");
+    } finally {
+      setInstalling(null);
+    }
+  };
+
+  const filteredCommunitySkills = community.skills.filter((t) => {
+    if (!communitySearchQuery) return true;
+    const q = communitySearchQuery.toLowerCase();
+    return t.name.toLowerCase().includes(q) ||
+      t.description.toLowerCase().includes(q) ||
+      t.author.toLowerCase().includes(q);
+  });
+
   const hasInstalledItems = skills.length > 0 || commands.length > 0;
 
   return (
@@ -171,11 +209,25 @@ export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
                             <Sparkles className="h-3.5 w-3.5 text-amber-500" />
                           </div>
                           <div className="min-w-0">
-                            <CardTitle className="text-sm font-mono truncate">{skill.name}</CardTitle>
+                            <div className="flex items-center gap-1.5">
+                              <CardTitle className="text-sm font-mono truncate">{skill.name}</CardTitle>
+                              {skill.provider === "codex" && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex-shrink-0">Codex</span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{skill.description}</p>
                           </div>
                         </div>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-green-600 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-950/30"
+                            title="Run in Chat"
+                            onClick={(e) => { e.stopPropagation(); router.push(`/chat?run=${encodeURIComponent(`/${skill.name}`)}`); }}
+                          >
+                            <Play className="h-3 w-3" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -313,6 +365,110 @@ export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
                 );
               })}
             </div>
+          )}
+        </section>
+
+        {/* Community Templates */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-teal-500" />
+              <span className="text-sm font-semibold">Community Templates</span>
+              {!community.loading && !community.error && (
+                <Badge variant="outline" className="text-xs">{community.skills.length}</Badge>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={community.refresh}
+              title="Refresh community templates"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${community.loading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+
+          {community.loading ? (
+            <Card className="border-dashed">
+              <CardContent className="py-6 text-center">
+                <RefreshCw className="h-5 w-5 mx-auto mb-2 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Loading community templates...</p>
+              </CardContent>
+            </Card>
+          ) : community.error ? (
+            <Card className="border-dashed">
+              <CardContent className="py-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Could not load community templates. Showing local templates only.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {community.skills.length > 0 && (
+                <div className="relative mb-3 max-w-xs">
+                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Search community skills..."
+                    className="w-full h-7 pl-7 pr-2 text-xs border rounded-md bg-background"
+                    value={communitySearchQuery}
+                    onChange={(e) => setCommunitySearchQuery(e.target.value)}
+                  />
+                </div>
+              )}
+              {filteredCommunitySkills.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="py-6 text-center">
+                    <p className="text-sm text-muted-foreground">No community skill templates found</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {filteredCommunitySkills.map((template) => {
+                    const isInstalled = installedNames.has(template.name);
+                    return (
+                      <Card key={template.name} className="group hover:shadow-md transition-shadow">
+                        <CardContent className="pt-4 pb-3 px-4 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-mono font-semibold truncate">{template.name}</h3>
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{template.description}</p>
+                            </div>
+                            <Badge variant="secondary" className="text-[10px] flex-shrink-0">{template.category}</Badge>
+                          </div>
+                          <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center gap-3">
+                              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <User className="h-2.5 w-2.5" /> {template.author}
+                              </span>
+                              <span className="flex items-center gap-1 text-[10px] text-amber-500">
+                                <Star className="h-2.5 w-2.5" /> {template.stars}
+                              </span>
+                              {isInstalled && (
+                                <Badge variant="outline" className="text-[10px] text-green-600 dark:text-green-400">
+                                  <CheckCircle className="h-2.5 w-2.5 mr-1" /> Installed
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={isInstalled ? "outline" : "default"}
+                              className="h-7 text-xs"
+                              onClick={() => handleInstallCommunity(template)}
+                              disabled={isInstalled || installing === template.name}
+                            >
+                              {installing === template.name ? "Installing..." : isInstalled ? "Reinstall" : "Install"}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </section>
 

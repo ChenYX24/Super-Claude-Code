@@ -297,7 +297,7 @@ function MessageDetailPanel({
   const Icon = style.icon;
 
   return (
-    <div className="w-[45%] border-l flex flex-col bg-muted/5">
+    <div className="w-full sm:w-[45%] absolute sm:static inset-0 z-10 sm:z-auto border-l flex flex-col bg-background sm:bg-muted/5">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b flex-shrink-0">
         <div className={`h-8 w-8 rounded-full flex items-center justify-center ${style.bg}`}>
@@ -553,7 +553,7 @@ function TeamOverview({
             <p className="text-sm">No teams match your search</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {filtered.map((team) => {
               const progress =
                 team.taskCount > 0
@@ -753,8 +753,8 @@ function TeamPageInner() {
 
   return (
     <div className="flex h-[calc(100vh-3rem)]">
-      {/* Left sidebar */}
-      <div className="w-60 border-r flex flex-col bg-muted/5">
+      {/* Left sidebar - hidden on small screens, shown on md+ */}
+      <div className="hidden md:flex w-60 border-r flex-col bg-muted/5">
         {/* Back to overview */}
         <div className="px-2 pt-2">
           <button
@@ -901,9 +901,33 @@ function TeamPageInner() {
       </div>
 
       {/* Main area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile header - visible on small screens when sidebar is hidden */}
+        <div className="flex items-center gap-2 px-3 py-2 border-b md:hidden">
+          <button
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground touch-manipulation"
+            onClick={() => setViewMode("overview")}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </button>
+          <Users className="h-4 w-4 text-primary" />
+          <span className="text-sm font-medium truncate">{activeTeam}</span>
+          {selectedAgent && (
+            <Badge variant="secondary" className="text-xs ml-1">{selectedAgent}</Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto h-8 w-8 p-0 touch-manipulation"
+            onClick={() => setSelectedAgent("")}
+            title="Clear filter"
+          >
+            <Users className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+
         {/* Tab bar */}
-        <div className="flex items-center border-b h-10 px-3">
+        <div className="flex items-center border-b h-10 px-3 overflow-x-auto">
           {(["chat", "tasks"] as const).map((tab) => (
             <button
               key={tab}
@@ -1002,8 +1026,8 @@ function TeamPageInner() {
             )}
           </div>
         ) : (
-          <div className="flex-1 overflow-auto p-4">
-            <div className="grid grid-cols-3 gap-4 h-full">
+          <div className="flex-1 overflow-auto p-3 sm:p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:h-full">
               {(
                 [
                   {

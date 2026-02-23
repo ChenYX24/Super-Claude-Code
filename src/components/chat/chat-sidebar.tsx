@@ -5,11 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Search, X, PanelLeftClose, PanelLeft, MessageCircle, Plus,
+  Search, X, PanelLeftClose, PanelLeft, MessageCircle, Plus, ExternalLink, Pin, Copy, Check,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { timeAgo, shortModel } from "@/lib/format-utils";
 import { STATUS_CONFIG } from "@/components/sessions/session-block";
 import type { SessionInfo, SessionStatus } from "@/components/sessions/types";
+import { useSessionMeta } from "@/hooks/use-session-meta";
+import { SessionActions, getTagColor } from "@/components/sessions/session-actions";
 
 interface ChatSidebarProps {
   sessions: SessionInfo[];
@@ -22,9 +25,9 @@ interface ChatSidebarProps {
   isChatMode?: boolean;
 }
 
-type DateGroup = "Today" | "Yesterday" | "This Week" | "Earlier";
+type DateGroup = "Pinned" | "Today" | "Yesterday" | "This Week" | "Earlier";
 
-function getDateGroup(timestamp: number): DateGroup {
+function getDateGroup(timestamp: number): Exclude<DateGroup, "Pinned"> {
   const now = new Date();
   const date = new Date(timestamp);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -37,7 +40,7 @@ function getDateGroup(timestamp: number): DateGroup {
   return "Earlier";
 }
 
-const GROUP_ORDER: DateGroup[] = ["Today", "Yesterday", "This Week", "Earlier"];
+const GROUP_ORDER: DateGroup[] = ["Pinned", "Today", "Yesterday", "This Week", "Earlier"];
 
 export function ChatSidebar({
   sessions,
@@ -50,32 +53,49 @@ export function ChatSidebar({
   isChatMode,
 }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const router = useRouter();
+  const { getMeta, updateMeta, metaMap } = useSessionMeta();
+
+  // Filter out deleted sessions
+  const visibleSessions = useMemo(() => {
+    return sessions.filter(s => !getMeta(s.id).deleted);
+  }, [sessions, metaMap, getMeta]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return sessions;
+    if (!searchQuery.trim()) return visibleSessions;
     const q = searchQuery.toLowerCase();
-    return sessions.filter(
-      (s) =>
+    return visibleSessions.filter((s) => {
+      const meta = getMeta(s.id);
+      return (
         s.firstMessage?.toLowerCase().includes(q) ||
         s.projectName.toLowerCase().includes(q) ||
-        s.model?.toLowerCase().includes(q)
-    );
-  }, [sessions, searchQuery]);
+        s.model?.toLowerCase().includes(q) ||
+        meta.displayName?.toLowerCase().includes(q) ||
+        meta.tags.some(t => t.toLowerCase().includes(q))
+      );
+    });
+  }, [visibleSessions, searchQuery, getMeta]);
 
   const grouped = useMemo(() => {
     const groups: Record<DateGroup, SessionInfo[]> = {
+      Pinned: [],
       Today: [],
       Yesterday: [],
       "This Week": [],
       Earlier: [],
     };
     for (const s of filtered) {
-      groups[getDateGroup(s.lastActive)].push(s);
+      if (getMeta(s.id).pinned) {
+        groups.Pinned.push(s);
+      } else {
+        groups[getDateGroup(s.lastActive)].push(s);
+      }
     }
     return groups;
-  }, [filtered]);
+  }, [filtered, getMeta]);
 
-  // Collapsed state — just toggle button
+  // Collapsed state -- just toggle button
   if (collapsed) {
     return (
       <div className="w-12 border-r bg-card flex flex-col items-center py-3 flex-shrink-0">
@@ -89,7 +109,7 @@ export function ChatSidebar({
           <PanelLeft className="h-4 w-4" />
         </Button>
         <div className="mt-4 space-y-2">
-          {sessions.slice(0, 5).map((s) => {
+          {visibleSessions.slice(0, 5).map((s) => {
             const key = `${s.project}|${s.id}`;
             const isSelected = key === selectedKey;
             const status = (s.status || "idle") as SessionStatus;
@@ -103,7 +123,7 @@ export function ChatSidebar({
                     ? "bg-primary text-primary-foreground"
                     : "hover:bg-muted"
                 }`}
-                title={s.firstMessage?.slice(0, 60) || s.projectName}
+                title={getMeta(s.id).displayName || s.firstMessage?.slice(0, 60) || s.projectName}
               >
                 <div className={`h-2.5 w-2.5 rounded-full ${cfg.dot} ${cfg.animation || ""}`} />
               </button>
@@ -184,7 +204,8 @@ export function ChatSidebar({
             if (items.length === 0) return null;
             return (
               <div key={group} className="mb-2">
-                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground sticky top-0 bg-card z-10">
+                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground sticky top-0 bg-card z-10 flex items-center gap-1.5">
+                  {group === "Pinned" && <Pin className="h-3 w-3" />}
                   {group}
                 </div>
                 <div className="space-y-0.5">
@@ -193,39 +214,84 @@ export function ChatSidebar({
                     const isSelected = key === selectedKey;
                     const status = (s.status || "idle") as SessionStatus;
                     const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
+                    const meta = getMeta(s.id);
+                    const displayName = meta.displayName || s.firstMessage?.slice(0, 50) || s.id.slice(0, 12);
+                    const tags = meta.tags || [];
 
                     return (
-                      <button
+                      <div
                         key={key}
-                        onClick={() => onSelect(key)}
-                        className={`w-full text-left px-2.5 py-2 rounded-lg transition-colors group ${
+                        className={`relative w-full text-left px-2.5 py-2 rounded-lg transition-colors group ${
                           isSelected
                             ? "bg-primary/10 border border-primary/20"
                             : "hover:bg-muted/60"
                         }`}
                       >
-                        <div className="flex items-start gap-2">
-                          <div className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${cfg.dot} ${cfg.animation || ""}`} />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate leading-tight">
-                              {s.firstMessage?.slice(0, 50) || s.id.slice(0, 12)}
-                            </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-xs text-muted-foreground truncate">
-                                {s.projectName}
-                              </span>
-                              {s.model && (
-                                <Badge variant="secondary" className="text-[10px] h-3.5 px-1">
-                                  {shortModel(s.model)}
-                                </Badge>
+                        <button
+                          onClick={() => onSelect(key)}
+                          className="w-full text-left"
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className={`h-2 w-2 rounded-full mt-1.5 flex-shrink-0 ${cfg.dot} ${cfg.animation || ""}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate leading-tight">
+                                {displayName}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-xs text-muted-foreground truncate">
+                                  {s.projectName}
+                                </span>
+                                {s.model && (
+                                  <Badge variant="secondary" className="text-[10px] h-3.5 px-1">
+                                    {shortModel(s.model)}
+                                  </Badge>
+                                )}
+                                <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">
+                                  {timeAgo(s.lastActive)}
+                                </span>
+                              </div>
+                              {tags.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {tags.map((tag) => (
+                                    <span key={tag} className={`text-[9px] px-1 py-0 rounded border ${getTagColor(tag)}`}>
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
                               )}
-                              <span className="text-xs text-muted-foreground ml-auto flex-shrink-0">
-                                {timeAgo(s.lastActive)}
-                              </span>
                             </div>
                           </div>
+                        </button>
+                        <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(s.id);
+                              setCopiedId(s.id);
+                              setTimeout(() => setCopiedId(null), 1500);
+                            }}
+                            title={`Copy ID: ${s.id}`}
+                          >
+                            {copiedId === s.id ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                          </Button>
+                          <SessionActions sessionId={s.id} meta={meta} onUpdate={updateMeta} />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/sessions?highlight=${encodeURIComponent(s.id)}`);
+                            }}
+                            title="View in Sessions page"
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

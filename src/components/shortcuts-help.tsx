@@ -21,6 +21,7 @@ const SHORTCUTS = [
   {
     category: "General",
     items: [
+      { keys: ["Ctrl", "K"], description: "Open command palette" },
       { keys: ["?"], description: "Show/hide this help" },
       { keys: ["/"], description: "Focus search (if available)" },
       { keys: ["Esc"], description: "Close modals" },

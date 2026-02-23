@@ -1,7 +1,9 @@
+export type CommandCategory = "built-in" | "slash" | "skill" | "agent";
+
 export interface ChatCommand {
   name: string;
   description: string;
-  category: "built-in" | "slash" | "skill";
+  category: CommandCategory;
   shortcut?: string;
 }
 
@@ -20,6 +22,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   "built-in": "Built-in",
   slash: "Slash Commands",
   skill: "Skills",
+  agent: "Agents",
 };
 
 /** Merge CLI-reported slash commands with built-in commands */
@@ -29,6 +32,7 @@ export function mergeCliCommands(
   const all = [...BUILTIN_COMMANDS];
   if (cliSlashCommands) {
     for (const cmd of cliSlashCommands) {
+      if (!cmd?.name) continue;
       const name = cmd.name.startsWith("/") ? cmd.name : `/${cmd.name}`;
       if (all.some((b) => b.name === name)) continue;
       all.push({ name, description: cmd.description || "", category: "slash" });
@@ -51,7 +55,7 @@ export function filterCommands(commands: ChatCommand[], input: string): ChatComm
 
 /** Group commands by category in display order */
 export function groupByCategory(commands: ChatCommand[]): [string, ChatCommand[]][] {
-  const order = ["built-in", "skill", "slash"] as const;
+  const order: CommandCategory[] = ["built-in", "slash", "skill", "agent"];
   const groups: [string, ChatCommand[]][] = [];
   for (const cat of order) {
     const cmds = commands.filter((c) => c.category === cat);
@@ -67,4 +71,61 @@ export function getFlatFilteredCommands(commands: ChatCommand[], input: string):
   const flat: ChatCommand[] = [];
   for (const [, cmds] of groups) flat.push(...cmds);
   return flat;
+}
+
+/** Create ChatCommands from skill info objects */
+export function createSkillCommands(skills: { name: string; description: string }[]): ChatCommand[] {
+  return skills.map((s) => ({
+    name: s.name.startsWith("/") ? s.name : `/${s.name}`,
+    description: s.description || "Custom skill",
+    category: "skill" as const,
+  }));
+}
+
+/** Create ChatCommands from agent info objects */
+export function createAgentCommands(agents: { name: string; description: string }[]): ChatCommand[] {
+  return agents.map((a) => ({
+    name: a.name.startsWith("/") ? a.name : `/${a.name}`,
+    description: a.description || "Custom agent",
+    category: "agent" as const,
+  }));
+}
+
+/** Get commands grouped by category (convenience wrapper) */
+export function getCommandsByCategory(commands: ChatCommand[]): Record<string, ChatCommand[]> {
+  const result: Record<string, ChatCommand[]> = {};
+  for (const cmd of commands) {
+    if (!result[cmd.category]) result[cmd.category] = [];
+    result[cmd.category].push(cmd);
+  }
+  return result;
+}
+
+/** Fetch agents and skills from the toolbox API and return them as ChatCommands */
+export async function loadToolboxCommands(): Promise<ChatCommand[]> {
+  try {
+    const res = await fetch("/api/toolbox");
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    const agentCommands: ChatCommand[] = (data.agents ?? []).map(
+      (a: { name: string; description?: string }) => ({
+        name: a.name.startsWith("@") ? a.name : `@${a.name}`,
+        description: a.description || "Custom agent",
+        category: "agent" as const,
+      }),
+    );
+
+    const skillCommands: ChatCommand[] = (data.skills ?? []).map(
+      (s: { name: string; description?: string }) => ({
+        name: s.name.startsWith("/") ? s.name : `/${s.name}`,
+        description: s.description || "Custom skill",
+        category: "skill" as const,
+      }),
+    );
+
+    return [...agentCommands, ...skillCommands];
+  } catch {
+    return [];
+  }
 }

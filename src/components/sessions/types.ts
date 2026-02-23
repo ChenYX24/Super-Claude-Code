@@ -1,5 +1,7 @@
 // Shared TypeScript interfaces for Sessions
 
+export type SessionProvider = "claude" | "codex" | "unknown";
+
 export interface SessionInfo {
   id: string;
   project: string;
@@ -9,6 +11,7 @@ export interface SessionInfo {
   messageCount: number;
   firstMessage?: string;
   model?: string;
+  provider: SessionProvider;
   totalInputTokens: number;
   totalOutputTokens: number;
   cacheReadTokens: number;

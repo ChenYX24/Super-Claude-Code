@@ -12,12 +12,15 @@ export interface MCPServersData {
   projects: { project: string; servers: Record<string, MCPServerConfig> }[];
 }
 
+export type ToolboxProvider = "claude" | "codex";
+
 export interface SkillInfo {
   name: string;
   description: string;
   allowedTools?: string[];
   content: string;
   path: string;
+  provider?: ToolboxProvider;
 }
 
 export interface CommandInfo {
@@ -32,6 +35,7 @@ export interface AgentInfo {
   description: string;
   content: string;
   path: string;
+  provider?: ToolboxProvider;
 }
 
 export interface RuleInfo {
@@ -40,6 +44,7 @@ export interface RuleInfo {
   preview: string;
   content: string;
   path: string;
+  provider?: ToolboxProvider;
 }
 
 export interface HookEntry {

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" fill="none">
+  <!-- Maskable: safe zone is inner 80%, so content in center 154x154 area -->
+  <rect width="192" height="192" fill="#0a0a0a"/>
+  <g transform="translate(96, 96)">
+    <!-- Lightning bolt (smaller for safe zone) -->
+    <path d="M-6,-32 L10,-32 L3,-6 L20,-6 L-10,32 L-3,6 L-20,6 Z" fill="#7c3aed"/>
+    <path d="M-6,-32 L10,-32 L3,-6 L20,-6 L-10,32 L-3,6 L-20,6 Z" fill="#a78bfa" opacity="0.3" transform="scale(1.05)"/>
+  </g>
+</svg>

@@ -22,11 +22,20 @@ function SessionsPageInner() {
       setLoading(false);
       setRefreshing(false);
 
-      // Deep-link: ?session=UUID auto-opens that session
+      // Deep-link: ?session=UUID auto-opens that session detail
       if (!deepLinked.current) {
         const sessionId = searchParams.get("session");
         if (sessionId && d.recentSessions) {
           const match = d.recentSessions.find(s => s.id === sessionId);
+          if (match) {
+            setActive({ project: match.project, id: match.id });
+            deepLinked.current = true;
+          }
+        }
+        // ?highlight=UUID scrolls to and opens the session detail
+        const highlightId = searchParams.get("highlight");
+        if (highlightId && d.recentSessions) {
+          const match = d.recentSessions.find(s => s.id === highlightId);
           if (match) {
             setActive({ project: match.project, id: match.id });
             deepLinked.current = true;

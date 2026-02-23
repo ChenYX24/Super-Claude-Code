@@ -1,9 +1,12 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Zap, Moon, Clock, Archive, Star } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Zap, Moon, Clock, Archive, Star, MessageSquare, Pin } from "lucide-react";
 import { fmtCost, fmtTokens, timeAgo, formatDT, shortModel } from "@/lib/format-utils";
 import type { SessionInfo, SessionStatus } from "./types";
+import type { SessionMetaEntry } from "@/hooks/use-session-meta";
+import { SessionActions, getTagColor } from "./session-actions";
 
 // Session status configuration
 export const STATUS_CONFIG: Record<SessionStatus, {
@@ -41,17 +44,22 @@ export function highlightText(text: string, search: string): React.ReactNode {
 }
 
 // Session Grid Block Component
-export function SessionBlock({ session, onClick, searchQuery, isFavorite, onToggleFavorite }: {
+export function SessionBlock({ session, onClick, searchQuery, isFavorite, onToggleFavorite, onOpenInChat, meta, onUpdateMeta }: {
   session: SessionInfo;
   onClick: () => void;
   searchQuery?: string;
   isFavorite?: boolean;
   onToggleFavorite?: (id: string) => void;
+  onOpenInChat?: (project: string, id: string) => void;
+  meta?: SessionMetaEntry;
+  onUpdateMeta?: (sessionId: string, updates: Partial<Pick<SessionMetaEntry, "displayName" | "pinned" | "tags" | "deleted">>) => void;
 }) {
   const status = (session.status || "idle") as SessionStatus;
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.idle;
   const model = shortModel(session.model);
   const modelColor = MODEL_COLORS[model] || "bg-zinc-500";
+  const displayName = meta?.displayName || session.firstMessage?.slice(0, 40) || session.id.slice(0, 10);
+  const tags = meta?.tags || [];
 
   return (
     <div
@@ -64,12 +72,19 @@ export function SessionBlock({ session, onClick, searchQuery, isFavorite, onTogg
         hover:scale-[1.03] hover:shadow-md cursor-pointer
         ${cfg.bg} ${cfg.border} ${cfg.glow}
       `}
-      title={`${session.firstMessage || session.id.slice(0, 12)}\n${session.projectName}\n${timeAgo(session.lastActive)}`}
+      title={`${displayName}\n${session.projectName}\n${timeAgo(session.lastActive)}`}
     >
       {/* Status indicator dot with animation */}
       <div className={`absolute top-2 right-2 h-2.5 w-2.5 rounded-full ${cfg.dot} ${cfg.animation || ""}`} />
 
-      {/* Star + Model color bar row */}
+      {/* Pin indicator */}
+      {meta?.pinned && (
+        <div className="absolute top-1.5 right-7">
+          <Pin className="h-3 w-3 text-primary/60" />
+        </div>
+      )}
+
+      {/* Star + Model color bar + actions row */}
       <div className="flex items-center gap-1.5 mb-2">
         {onToggleFavorite && (
           <button
@@ -88,17 +103,32 @@ export function SessionBlock({ session, onClick, searchQuery, isFavorite, onTogg
           </button>
         )}
         <div className={`h-1 w-8 rounded-full ${modelColor} opacity-70`} />
+        {meta && onUpdateMeta && (
+          <div className="ml-auto z-10 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+            <SessionActions sessionId={session.id} meta={meta} onUpdate={onUpdateMeta} />
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="text-xs font-medium truncate leading-tight mb-1 text-foreground/90">
-        {searchQuery ? highlightText(session.firstMessage ? session.firstMessage.slice(0, 40) : session.id.slice(0, 10), searchQuery) :
-         (session.firstMessage ? session.firstMessage.slice(0, 40) : session.id.slice(0, 10))}
+        {searchQuery ? highlightText(displayName, searchQuery) : displayName}
       </div>
       <div className="text-[10px] text-muted-foreground truncate">
         {searchQuery ? highlightText(session.projectName.length > 18 ? "..." + session.projectName.slice(-16) : session.projectName, searchQuery) :
          (session.projectName.length > 18 ? "..." + session.projectName.slice(-16) : session.projectName)}
       </div>
+
+      {/* Tags */}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-1.5">
+          {tags.map((tag) => (
+            <span key={tag} className={`text-[9px] px-1 py-0.5 rounded border ${getTagColor(tag)}`}>
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Footer: time + cost */}
       <div className="flex items-center justify-between mt-2 text-[10px] text-muted-foreground">
@@ -109,7 +139,7 @@ export function SessionBlock({ session, onClick, searchQuery, isFavorite, onTogg
       {/* Hover overlay with more detail */}
       <div className="absolute inset-0 rounded-lg bg-background/95 opacity-0 group-hover:opacity-100 transition-opacity duration-150 p-3 flex flex-col justify-between pointer-events-none">
         <div>
-          <div className="text-xs font-semibold truncate mb-1">{session.firstMessage || session.id.slice(0, 16)}</div>
+          <div className="text-xs font-semibold truncate mb-1">{meta?.displayName || session.firstMessage || session.id.slice(0, 16)}</div>
           <div className="text-[10px] text-muted-foreground">{session.projectName}</div>
         </div>
         <div className="space-y-1">
@@ -120,12 +150,32 @@ export function SessionBlock({ session, onClick, searchQuery, isFavorite, onTogg
               {cfg.label}
             </Badge>
           </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {tags.map((tag) => (
+                <span key={tag} className={`text-[9px] px-1 py-0.5 rounded border ${getTagColor(tag)}`}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>{formatDT(session.startTime)}</span>
             <span className="font-mono font-medium">{fmtCost(session.estimatedCost)}</span>
           </div>
-          <div className="text-[10px] font-mono text-muted-foreground">
-            {fmtTokens(session.totalInputTokens)}in / {fmtTokens(session.totalOutputTokens)}out
+          <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+            <span>{fmtTokens(session.totalInputTokens)}in / {fmtTokens(session.totalOutputTokens)}out</span>
+            {onOpenInChat && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0 pointer-events-auto"
+                onClick={(e) => { e.stopPropagation(); onOpenInChat(session.project, session.id); }}
+                title="Open in Chat"
+              >
+                <MessageSquare className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         </div>
       </div>

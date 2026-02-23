@@ -8,9 +8,12 @@ import path from "path";
 import os from "os";
 
 const CLAUDE_DIR = path.join(os.homedir(), ".claude");
+const CODEX_DIR = path.join(os.homedir(), ".codex");
 const SETTINGS_FILE = path.join(CLAUDE_DIR, "settings.json");
 
 // ---- Types ----
+
+export type ToolboxProvider = "claude" | "codex";
 
 export interface SkillInfo {
   name: string;
@@ -18,6 +21,7 @@ export interface SkillInfo {
   allowedTools?: string[];
   content: string;
   path: string;
+  provider: ToolboxProvider;
 }
 
 export interface CommandInfo {
@@ -32,6 +36,7 @@ export interface AgentInfo {
   description: string;
   content: string;
   path: string;
+  provider: ToolboxProvider;
 }
 
 export interface RuleInfo {
@@ -40,6 +45,7 @@ export interface RuleInfo {
   preview: string;
   content: string;
   path: string;
+  provider: ToolboxProvider;
 }
 
 export interface HookEntry {
@@ -120,6 +126,7 @@ export function listSkills(): SkillInfo[] {
         allowedTools: meta.allowed_tools ? meta.allowed_tools.split(",").map(s => s.trim()) : undefined,
         content: body,
         path: skillFile,
+        provider: "claude",
       });
     }
   } catch { /* skip */ }
@@ -168,6 +175,7 @@ export function listAgents(): AgentInfo[] {
         description: meta.description || body.split("\n")[0] || "",
         content: body,
         path: filePath,
+        provider: "claude",
       });
     }
   } catch { /* skip */ }
@@ -200,6 +208,7 @@ export function listRules(): RuleInfo[] {
               preview: lines.slice(0, 3).join("\n"),
               content: body,
               path: fullPath,
+              provider: "claude",
             });
           }
         } catch { /* skip */ }
@@ -265,14 +274,75 @@ export function getHooksConfig(): HookEntry[] {
   return hooks.filter(h => h.command && h.command.trim());
 }
 
+// ---- Codex Skills ----
+
+export function listCodexSkills(): SkillInfo[] {
+  const skillsDir = path.join(CODEX_DIR, "skills");
+  if (!dirExists(skillsDir)) return [];
+
+  const skills: SkillInfo[] = [];
+  try {
+    for (const entry of fs.readdirSync(skillsDir)) {
+      if (entry.startsWith(".")) continue; // Skip .system
+      const skillDir = path.join(skillsDir, entry);
+      if (!dirExists(skillDir)) continue;
+
+      const skillFile = path.join(skillDir, "SKILL.md");
+      if (!fs.existsSync(skillFile)) continue;
+
+      const raw = safeReadFile(skillFile);
+      const { meta, body } = parseFrontmatter(raw);
+      skills.push({
+        name: meta.name || entry,
+        description: meta.description || body.split("\n")[0] || "",
+        allowedTools: meta.allowed_tools ? meta.allowed_tools.split(",").map(s => s.trim()) : undefined,
+        content: body,
+        path: skillFile,
+        provider: "codex",
+      });
+    }
+  } catch { /* skip */ }
+  return skills;
+}
+
+// ---- Codex Rules ----
+
+export function listCodexRules(): RuleInfo[] {
+  const rulesDir = path.join(CODEX_DIR, "rules");
+  if (!dirExists(rulesDir)) return [];
+
+  const rules: RuleInfo[] = [];
+  try {
+    for (const entry of fs.readdirSync(rulesDir)) {
+      const fullPath = path.join(rulesDir, entry);
+      const raw = safeReadFile(fullPath);
+      if (!raw) continue;
+
+      // Parse prefix_rule format
+      const ruleLines = raw.split("\n").filter(l => l.trim());
+      const preview = ruleLines.slice(0, 3).join("\n");
+
+      rules.push({
+        name: entry.replace(".rules", ""),
+        group: "codex",
+        preview,
+        content: raw,
+        path: fullPath,
+        provider: "codex",
+      });
+    }
+  } catch { /* skip */ }
+  return rules;
+}
+
 // ---- Combined ----
 
 export function getToolboxData(): ToolboxData {
   return {
-    skills: listSkills(),
+    skills: [...listSkills(), ...listCodexSkills()],
     commands: listCommands(),
     agents: listAgents(),
-    rules: listRules(),
+    rules: [...listRules(), ...listCodexRules()],
     hooks: getHooksConfig(),
   };
 }

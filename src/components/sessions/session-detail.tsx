@@ -8,7 +8,7 @@ import { MarkdownContent } from "@/components/markdown-content";
 import { TerminalView } from "@/components/terminal-view";
 import {
   RefreshCw, ArrowLeft, Wrench, ChevronsUp, ChevronsDown, MapPin,
-  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download, BarChart3, Star, MessageCircle,
+  FileText, DollarSign, Search, X, Monitor, SquareTerminal, Download, BarChart3, Star, MessageCircle, Copy, Check,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { fmtCost, fmtTokens, shortModel } from "@/lib/format-utils";
@@ -33,6 +33,7 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [convSearch, setConvSearch] = useState("");
   const [convSearchMatch, setConvSearchMatch] = useState(0);
+  const [idCopied, setIdCopied] = useState(false);
   const [viewMode, setViewMode] = useState<"card" | "terminal">(() => {
     if (typeof window !== "undefined") {
       return (localStorage.getItem("session-view-mode") as "card" | "terminal") || "card";
@@ -169,8 +170,20 @@ export function SessionDetailView({ projectPath, sessionId, onBack }: {
         <Button variant="ghost" size="sm" onClick={onBack}><ArrowLeft className="h-4 w-4" /></Button>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-bold truncate">{detail.projectName}</div>
-          <div className="text-xs text-muted-foreground">
-            {detail.startTime ? new Date(detail.startTime).toLocaleString("zh-CN") : ""} · {shortModel(detail.model)}
+          <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+            <span>{detail.startTime ? new Date(detail.startTime).toLocaleString("zh-CN") : ""} · {shortModel(detail.model)}</span>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(detail.id);
+                setIdCopied(true);
+                setTimeout(() => setIdCopied(false), 1500);
+              }}
+              className="inline-flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded border bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+              title={`Click to copy: ${detail.id}`}
+            >
+              {idCopied ? <Check className="h-2.5 w-2.5 text-green-500" /> : <Copy className="h-2.5 w-2.5" />}
+              {detail.id.slice(0, 8)}...
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
