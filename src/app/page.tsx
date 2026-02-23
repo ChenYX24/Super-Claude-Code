@@ -479,7 +479,7 @@ export default function HomePage() {
               </Link>
               <Link href="/editor">
                 <Button variant="outline" className="w-full justify-start gap-2 h-10">
-                  <FileEdit className="h-4 w-4" /> CLAUDE.md
+                  <FileEdit className="h-4 w-4" /> Instructions
                 </Button>
               </Link>
               <Link href="/tokens">

@@ -134,7 +134,7 @@ export function HooksTab({ hooks, onRefresh, HookDialog }: HooksTabProps) {
         <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5">
           <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground">
-            Shell commands that run automatically at lifecycle events. Configured in <code className="bg-muted px-1 rounded">~/.claude/settings.json</code>
+            Shell commands that run automatically at lifecycle events. Configured in settings files
           </p>
         </div>
         {allTypes.map((type) => {

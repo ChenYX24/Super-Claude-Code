@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import { OnlineSearch } from "./online-search";
 import { useCommunityTemplates } from "@/hooks/use-community-templates";
 import type { RemoteTemplate } from "@/lib/remote-registry";
+import { ProviderFilter, filterByProvider } from "./provider-filter";
 import type { AgentInfo } from "./types";
 
 interface AgentsTabProps {
@@ -86,7 +87,10 @@ export function AgentsTab({ agents, onRefresh, AgentDialog }: AgentsTabProps) {
     }
   };
 
+  const [providerFilter, setProviderFilter] = useState<"all" | "claude" | "codex">("all");
+
   // Get installed agent names
+  const filteredAgents = filterByProvider(agents, providerFilter);
   const installedNames = new Set(agents.map(a => a.name));
 
   // Filter templates
@@ -195,14 +199,17 @@ export function AgentsTab({ agents, onRefresh, AgentDialog }: AgentsTabProps) {
         {/* Installed Agents */}
         {agents.length > 0 && (
           <section>
-            <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5 mb-3">
-              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
-                Custom agent definitions with specialized prompts and tool access. Located in <code className="bg-muted px-1 rounded">~/.claude/agents/</code>
-              </p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5 flex-1 mr-3">
+                <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  Custom agent definitions with specialized prompts and tool access. Located in <code className="bg-muted px-1 rounded">{providerFilter === "all" ? "~/.claude/agents/ and ~/.codex/agents/" : providerFilter === "codex" ? "~/.codex/agents/" : "~/.claude/agents/"}</code>
+                </p>
+              </div>
+              <ProviderFilter value={providerFilter} onChange={setProviderFilter} items={agents} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-              {agents.map((agent) => (
+              {filteredAgents.map((agent) => (
                 <div key={agent.name} className="group relative">
                   <Card className="hover:shadow-md transition-shadow">
                     <CardHeader className="pb-2">

@@ -15,6 +15,7 @@ import {
   FolderOpen, ShoppingBag, Search, CheckCircle,
 } from "lucide-react";
 import { OnlineSearch } from "./online-search";
+import { ProviderFilter, filterByProvider } from "./provider-filter";
 import type { RuleInfo } from "./types";
 
 interface RulesTabProps {
@@ -78,9 +79,12 @@ export function RulesTab({ rules, onRefresh, RuleDialog }: RulesTabProps) {
     }
   };
 
+  const [providerFilter, setProviderFilter] = useState<"all" | "claude" | "codex">("all");
+
   const existingGroups = Array.from(new Set(rules.map(r => r.group)));
 
   // Get installed rule names
+  const filteredRules = filterByProvider(rules, providerFilter);
   const installedNames = new Set(rules.map(r => r.name));
 
   // Filter templates
@@ -151,7 +155,7 @@ export function RulesTab({ rules, onRefresh, RuleDialog }: RulesTabProps) {
   }
 
   const grouped = new Map<string, RuleInfo[]>();
-  for (const rule of rules) {
+  for (const rule of filteredRules) {
     const list = grouped.get(rule.group) || [];
     list.push(rule);
     grouped.set(rule.group, list);
@@ -168,11 +172,14 @@ export function RulesTab({ rules, onRefresh, RuleDialog }: RulesTabProps) {
         {/* Installed Rules */}
         {rules.length > 0 && (
           <section>
-            <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5 mb-3">
-              <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground">
-                Instruction files Claude follows automatically. Organized by category in <code className="bg-muted px-1 rounded">~/.claude/rules/</code>
-              </p>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-start gap-2 bg-muted/30 rounded-lg px-3 py-2.5 flex-1 mr-3">
+                <Info className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">
+                  Instruction files Claude follows automatically. Organized by category in <code className="bg-muted px-1 rounded">{providerFilter === "all" ? "~/.claude/rules/ and ~/.codex/rules/" : providerFilter === "codex" ? "~/.codex/rules/" : "~/.claude/rules/"}</code>
+                </p>
+              </div>
+              <ProviderFilter value={providerFilter} onChange={setProviderFilter} items={rules} />
             </div>
             <div className="space-y-5">
               {Array.from(grouped.entries()).map(([group, items]) => (

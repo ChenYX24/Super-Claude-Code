@@ -24,7 +24,7 @@ import {
 import { shortModel, fmtTokens, fmtCost } from "@/lib/format-utils";
 import { ChatCommandMenu } from "@/components/chat/chat-command-menu";
 import {
-  BUILTIN_COMMANDS, mergeCliCommands, getFlatFilteredCommands, LOCAL_COMMAND_NAMES,
+  mergeAllCommands, getFlatFilteredCommands, LOCAL_COMMAND_NAMES, loadToolboxCommands,
 } from "@/lib/chat-commands";
 import type { ChatCommand } from "@/lib/chat-commands";
 
@@ -48,7 +48,7 @@ function ChatPageContent() {
 
   // Live chat state (via streaming hook)
   const [chatInput, setChatInput] = useState("");
-  const [chatMode, setChatMode] = useState<"session" | "chat">("session");
+  const [chatMode, setChatMode] = useState<"session" | "chat">("chat");
   const [claudeSessionId, setClaudeSessionId] = useState<string>("");
 
   // CLI capabilities (captured from system.init)
@@ -56,19 +56,23 @@ function ChatPageContent() {
   const [cliModel, setCliModel] = useState<string>("");
 
   // Workspace settings (cwd + permission mode)
-  const [chatCwd, setChatCwd] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("chat-cwd") || "" : ""
-  );
-  const [permissionMode, setPermissionMode] = useState<PermissionMode>(() =>
-    ((typeof window !== "undefined" ? localStorage.getItem("chat-permission-mode") : null) as PermissionMode) || "default"
-  );
-  const [chatProvider, setChatProvider] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("chat-provider") || "claude" : "claude"
-  );
+  const [chatCwd, setChatCwd] = useState<string>("");
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
+  const [chatProvider, setChatProvider] = useState<string>("claude");
   const [compareMode, setCompareMode] = useState(false);
-  const [compareRightProvider, setCompareRightProvider] = useState<string>(() =>
-    typeof window !== "undefined" ? localStorage.getItem("chat-compare-right") || "codex" : "codex"
-  );
+  const [compareRightProvider, setCompareRightProvider] = useState<string>("codex");
+
+  // Sync from localStorage after mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    const savedCwd = localStorage.getItem("chat-cwd");
+    const savedPermission = localStorage.getItem("chat-permission-mode") as PermissionMode | null;
+    const savedProvider = localStorage.getItem("chat-provider");
+    const savedCompareRight = localStorage.getItem("chat-compare-right");
+    if (savedCwd) setChatCwd(savedCwd);
+    if (savedPermission) setPermissionMode(savedPermission);
+    if (savedProvider) setChatProvider(savedProvider);
+    if (savedCompareRight) setCompareRightProvider(savedCompareRight);
+  }, []);
 
   // Streaming hook
   const {
@@ -97,8 +101,22 @@ function ChatPageContent() {
   const lastMessageCountRef = useRef(0);
   const chatInputRef = useRef(chatInput);
 
-  // Derived: merged command list
-  const allCommands = useMemo(() => mergeCliCommands(cliSlashCommands), [cliSlashCommands]);
+  // Toolbox commands (reloaded when provider changes)
+  const [toolboxCommands, setToolboxCommands] = useState<ChatCommand[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadToolboxCommands(chatProvider).then((cmds) => {
+      if (!cancelled) setToolboxCommands(cmds);
+    });
+    return () => { cancelled = true; };
+  }, [chatProvider]);
+
+  // Derived: merged command list (provider-aware)
+  const allCommands = useMemo(
+    () => mergeAllCommands({ provider: chatProvider, cliSlashCommands, toolboxCommands }),
+    [chatProvider, cliSlashCommands, toolboxCommands],
+  );
   const showCommandMenu = chatInput.startsWith("/") && !chatSending && !cmdMenuDismissed;
 
   // URL deep-linking
@@ -667,13 +685,19 @@ function ChatPageContent() {
                     {claudeSessionId && <span className="block mt-1 font-mono text-xs opacity-60">Session: {claudeSessionId.slice(0, 8)}...</span>}
                   </p>
                   <div className="flex flex-wrap justify-center gap-2 mt-5">
-                    {[
+                    {(chatProvider === "codex" ? [
+                      { name: "/help", desc: "Commands" },
+                      { name: "/model", desc: "Model" },
+                      { name: "/config", desc: "Config" },
+                      { name: "/status", desc: "Status" },
+                      { name: "/compact", desc: "Compact" },
+                    ] : [
                       { name: "/help", desc: "Commands" },
                       { name: "/commit", desc: "Commit" },
                       { name: "/review-pr", desc: "Review PR" },
                       { name: "/model", desc: "Model" },
                       { name: "/cost", desc: "Cost" },
-                    ].map((qa) => (
+                    ]).map((qa) => (
                       <Button
                         key={qa.name}
                         variant="outline"

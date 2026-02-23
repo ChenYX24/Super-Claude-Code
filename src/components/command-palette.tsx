@@ -85,7 +85,7 @@ const PAGE_ITEMS: { href: string; label: string; icon: React.ReactNode; shortcut
   { href: "/chat", label: "Chat", icon: <MessageCircle className="h-4 w-4" />, shortcut: "4" },
   { href: "/tokens", label: "Tokens", icon: <Coins className="h-4 w-4" />, shortcut: "5" },
   { href: "/toolbox", label: "Toolbox", icon: <Wrench className="h-4 w-4" />, shortcut: "6" },
-  { href: "/editor", label: "CLAUDE.md", icon: <FileEdit className="h-4 w-4" />, shortcut: "7" },
+  { href: "/editor", label: "Instructions", icon: <FileEdit className="h-4 w-4" />, shortcut: "7" },
   { href: "/settings", label: "Settings", icon: <Settings className="h-4 w-4" />, shortcut: "8" },
 ];
 

@@ -9,6 +9,7 @@ import {
   Sparkles,
   Bot,
   BookOpen,
+  Zap,
   X,
   Eye,
   Pencil,
@@ -20,7 +21,7 @@ import {
 
 // ---- Types ----
 
-type CreatorType = "skill" | "agent" | "rule";
+type CreatorType = "skill" | "agent" | "rule" | "hook";
 
 interface AiCreatorDialogProps {
   open: boolean;
@@ -47,6 +48,12 @@ const TYPE_CONFIG: Record<CreatorType, { label: string; icon: typeof Sparkles; c
     icon: BookOpen,
     color: "text-cyan-500",
     description: "Instruction file Claude follows automatically",
+  },
+  hook: {
+    label: "Hook",
+    icon: Zap,
+    color: "text-green-500",
+    description: "Shell command that runs at lifecycle events (PreToolUse, PostToolUse, etc.)",
   },
 };
 
@@ -95,6 +102,11 @@ export function AiCreatorDialog({ open, onClose, onSuccess, defaultType = "skill
   const [generatedContent, setGeneratedContent] = useState("");
   const [previewMode, setPreviewMode] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [hookType, setHookType] = useState("PreToolUse");
+  const [hookCommand, setHookCommand] = useState("");
+  const [hookMatcher, setHookMatcher] = useState("");
+  const [hookTimeout, setHookTimeout] = useState("");
+  const [hookDescription, setHookDescription] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -110,6 +122,11 @@ export function AiCreatorDialog({ open, onClose, onSuccess, defaultType = "skill
       setGeneratedContent("");
       setPreviewMode(true);
       setSaving(false);
+      setHookType("PreToolUse");
+      setHookCommand("");
+      setHookMatcher("");
+      setHookTimeout("");
+      setHookDescription("");
     }
   }, [open, defaultType]);
 
@@ -281,6 +298,43 @@ export function AiCreatorDialog({ open, onClose, onSuccess, defaultType = "skill
     }
   }, [name, generatedContent, type, ruleGroup, toast, onSuccess, onClose]);
 
+  // ---- Save Hook ----
+
+  const handleSaveHook = useCallback(async () => {
+    if (!hookCommand.trim()) {
+      toast("Please provide a command", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        type: hookType,
+        command: hookCommand.trim(),
+      };
+      if (hookMatcher.trim()) body.matcher = hookMatcher.trim();
+      if (hookTimeout) body.timeout = Number(hookTimeout);
+      if (hookDescription.trim()) body.description = hookDescription.trim();
+
+      const res = await fetch("/api/toolbox/hooks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(data.message || "Hook created successfully", "success");
+        onSuccess();
+        onClose();
+      } else {
+        toast(data.error || "Save failed", "error");
+      }
+    } catch {
+      toast("Failed to save hook", "error");
+    } finally {
+      setSaving(false);
+    }
+  }, [hookType, hookCommand, hookMatcher, hookTimeout, hookDescription, toast, onSuccess, onClose]);
+
   // ---- Helpers ----
 
   if (!open) return null;
@@ -317,7 +371,7 @@ export function AiCreatorDialog({ open, onClose, onSuccess, defaultType = "skill
               {/* Type selector */}
               <div>
                 <label className="text-sm font-medium block mb-2">What do you want to create?</label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   {(Object.keys(TYPE_CONFIG) as CreatorType[]).map((t) => {
                     const config = TYPE_CONFIG[t];
                     const Icon = config.icon;
@@ -343,53 +397,126 @@ export function AiCreatorDialog({ open, onClose, onSuccess, defaultType = "skill
                 </div>
               </div>
 
-              {/* Description input */}
-              <div>
-                <label className="text-sm font-medium block mb-1.5">
-                  Describe what you want this {TYPE_CONFIG[type].label.toLowerCase()} to do
-                </label>
-                <textarea
-                  ref={textareaRef}
-                  className="w-full px-3 py-2 border rounded-md text-sm bg-background min-h-[120px] resize-y"
-                  placeholder={getPlaceholder(type)}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  autoFocus
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Be specific about the behavior, constraints, and use cases you have in mind.
-                </p>
-              </div>
+              {/* Description input (non-hook types) */}
+              {type !== "hook" && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">
+                      Describe what you want this {TYPE_CONFIG[type].label.toLowerCase()} to do
+                    </label>
+                    <textarea
+                      ref={textareaRef}
+                      className="w-full px-3 py-2 border rounded-md text-sm bg-background min-h-[120px] resize-y"
+                      placeholder={getPlaceholder(type)}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      autoFocus
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Be specific about the behavior, constraints, and use cases you have in mind.
+                    </p>
+                  </div>
 
-              {/* Optional: pre-fill name */}
-              <div>
-                <label className="text-sm font-medium block mb-1.5">
-                  Name <span className="text-muted-foreground font-normal">(optional, can set after generation)</span>
-                </label>
-                <input
-                  type="text"
-                  className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
-                  placeholder={type === "skill" ? "my-skill" : type === "agent" ? "my-agent" : "my-rule"}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
+                  {/* Optional: pre-fill name */}
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">
+                      Name <span className="text-muted-foreground font-normal">(optional, can set after generation)</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+                      placeholder={type === "skill" ? "my-skill" : type === "agent" ? "my-agent" : "my-rule"}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
 
-              {/* Rule group selector */}
-              {type === "rule" && (
-                <div>
-                  <label className="text-sm font-medium block mb-1.5">Rule Group</label>
-                  <input
-                    type="text"
-                    className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
-                    placeholder="common"
-                    value={ruleGroup}
-                    onChange={(e) => setRuleGroup(e.target.value)}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Group folder under ~/.claude/rules/ (e.g., common, python, typescript)
-                  </p>
-                </div>
+                  {/* Rule group selector */}
+                  {type === "rule" && (
+                    <div>
+                      <label className="text-sm font-medium block mb-1.5">Rule Group</label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+                        placeholder="common"
+                        value={ruleGroup}
+                        onChange={(e) => setRuleGroup(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Group folder under ~/.claude/rules/ (e.g., common, python, typescript)
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Hook-specific form fields */}
+              {type === "hook" && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">Hook Event Type</label>
+                    <select
+                      value={hookType}
+                      onChange={(e) => setHookType(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                    >
+                      <option value="PreToolUse">PreToolUse</option>
+                      <option value="PostToolUse">PostToolUse</option>
+                      <option value="Notification">Notification</option>
+                      <option value="Stop">Stop</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">
+                      Matcher <span className="text-muted-foreground font-normal">(optional — tool name filter)</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+                      placeholder="e.g., Bash, Write (leave empty for all tools)"
+                      value={hookMatcher}
+                      onChange={(e) => setHookMatcher(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">Command *</label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+                      placeholder="e.g., /path/to/script.sh $TOOL_INPUT"
+                      value={hookCommand}
+                      onChange={(e) => setHookCommand(e.target.value)}
+                      autoFocus
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Shell command to execute. Use $TOOL_INPUT for tool input JSON.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">
+                      Timeout <span className="text-muted-foreground font-normal">(ms, optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full px-3 py-2 border rounded-md text-sm font-mono bg-background"
+                      placeholder="10000"
+                      value={hookTimeout}
+                      onChange={(e) => setHookTimeout(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium block mb-1.5">
+                      Description <span className="text-muted-foreground font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full px-3 py-2 border rounded-md text-sm bg-background"
+                      placeholder="What this hook does"
+                      value={hookDescription}
+                      onChange={(e) => setHookDescription(e.target.value)}
+                    />
+                  </div>
+                </>
               )}
             </>
           )}
@@ -511,7 +638,7 @@ export function AiCreatorDialog({ open, onClose, onSuccess, defaultType = "skill
             <Button variant="outline" size="sm" onClick={handleClose} disabled={saving}>
               Cancel
             </Button>
-            {step === "input" && (
+            {step === "input" && type !== "hook" && (
               <Button
                 size="sm"
                 className="gap-1.5"
@@ -520,6 +647,26 @@ export function AiCreatorDialog({ open, onClose, onSuccess, defaultType = "skill
               >
                 <Wand2 className="h-3.5 w-3.5" />
                 Generate
+              </Button>
+            )}
+            {step === "input" && type === "hook" && (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={handleSaveHook}
+                disabled={saving || !hookCommand.trim()}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-3.5 w-3.5" />
+                    Create Hook
+                  </>
+                )}
               </Button>
             )}
             {step === "generating" && (
@@ -571,6 +718,8 @@ function getPlaceholder(type: CreatorType): string {
       return "e.g., A documentation agent that generates API docs from source code. It should analyze function signatures, JSDoc comments, and usage patterns to produce comprehensive markdown documentation.";
     case "rule":
       return "e.g., Rules for Python projects: always use type hints, prefer dataclasses over dicts, use pathlib instead of os.path, follow PEP 8 naming conventions.";
+    case "hook":
+      return "";
   }
 }
 

@@ -18,6 +18,9 @@ import {
   Save,
   Bell,
   DollarSign,
+  MessageCircle,
+  Terminal,
+  Loader2,
 } from "lucide-react";
 import type { ClaudeSettings, CodexSettings, EnvironmentInfo } from "@/lib/settings-reader";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -67,6 +70,18 @@ export default function SettingsPage() {
 
   const [isSaving, setIsSaving] = useState(false);
 
+  // Telegram Bot state
+  const [botStatus, setBotStatus] = useState<{
+    configured: boolean;
+    url: string | null;
+    pendingUpdateCount?: number;
+    lastErrorMessage?: string | null;
+    error?: string;
+  } | null>(null);
+  const [botLoading, setBotLoading] = useState(true);
+  const [webhookUrl, setWebhookUrl] = useState("");
+  const [settingWebhook, setSettingWebhook] = useState(false);
+
   const loadSettings = () => {
     fetch("/api/settings")
       .then((r) => r.json())
@@ -106,6 +121,44 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  // Load Telegram bot status
+  useEffect(() => {
+    fetch("/api/bot/telegram/setup")
+      .then((r) => r.json())
+      .then((data) => {
+        setBotStatus(data);
+        if (data.url) setWebhookUrl(data.url);
+      })
+      .catch(() => setBotStatus({ configured: false, url: null, error: "Failed to connect" }))
+      .finally(() => setBotLoading(false));
+  }, []);
+
+  const handleSetWebhook = async () => {
+    if (!webhookUrl.trim()) {
+      toast("Please enter a webhook URL", "error");
+      return;
+    }
+    setSettingWebhook(true);
+    try {
+      const res = await fetch("/api/bot/telegram/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: webhookUrl.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast("Webhook set successfully", "success");
+        setBotStatus({ configured: true, url: webhookUrl.trim(), pendingUpdateCount: 0, lastErrorMessage: null });
+      } else {
+        toast(data.error || "Failed to set webhook", "error");
+      }
+    } catch {
+      toast("Failed to set webhook", "error");
+    } finally {
+      setSettingWebhook(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -514,6 +567,132 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Telegram Bot */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MessageCircle className="h-5 w-5" />
+            Telegram Bot
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="text-sm text-muted-foreground">
+            Connect a Telegram bot for remote session management and chat.
+          </div>
+
+          {/* Status */}
+          {botLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking bot status...
+            </div>
+          ) : botStatus?.error === "TELEGRAM_BOT_TOKEN not configured" ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Not Configured
+                </Badge>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Set <code className="bg-muted px-1 py-0.5 rounded text-xs">TELEGRAM_BOT_TOKEN</code> environment variable to enable the bot.
+              </div>
+              <div className="bg-muted rounded-md p-3 space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <Terminal className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span>TELEGRAM_BOT_TOKEN=&lt;your-bot-token&gt;</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <Terminal className="h-3 w-3 text-muted-foreground shrink-0" />
+                  <span>TELEGRAM_CHAT_IDS=&lt;comma-separated-chat-ids&gt;</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Token Status */}
+              <div className="flex items-center gap-2">
+                <Badge variant="default">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Token Configured
+                </Badge>
+                {botStatus?.configured && botStatus.url && (
+                  <Badge variant="default">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Webhook Active
+                  </Badge>
+                )}
+              </div>
+
+              {/* Current Webhook Info */}
+              {botStatus?.url && (
+                <div className="bg-muted/50 rounded-md p-3 space-y-1">
+                  <div className="text-xs font-medium">Current Webhook</div>
+                  <code className="text-xs break-all">{botStatus.url}</code>
+                  {botStatus.pendingUpdateCount !== undefined && botStatus.pendingUpdateCount > 0 && (
+                    <div className="text-xs text-amber-600 mt-1">
+                      {botStatus.pendingUpdateCount} pending update(s)
+                    </div>
+                  )}
+                  {botStatus.lastErrorMessage && (
+                    <div className="text-xs text-red-500 mt-1">
+                      Last error: {botStatus.lastErrorMessage}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Set/Update Webhook */}
+              <div className="space-y-2">
+                <div className="text-sm font-medium">
+                  {botStatus?.url ? "Update" : "Set"} Webhook URL
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={webhookUrl}
+                    onChange={(e) => setWebhookUrl(e.target.value)}
+                    className="flex-1 px-3 py-1.5 text-sm font-mono border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="https://your-domain.com/api/bot/telegram"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSetWebhook}
+                    disabled={settingWebhook || !webhookUrl.trim()}
+                  >
+                    {settingWebhook ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> Setting...</>
+                    ) : (
+                      "Set Webhook"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Supported Commands (always show) */}
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Supported Commands</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { cmd: "/help", desc: "Show available commands" },
+                { cmd: "/sessions", desc: "List active sessions" },
+                { cmd: "/status", desc: "Dashboard status overview" },
+                { cmd: "/chat", desc: "Chat with Claude session" },
+                { cmd: "/bg", desc: "Run background task" },
+                { cmd: "/queue", desc: "View task queue" },
+              ].map((item) => (
+                <div key={item.cmd} className="flex items-center gap-2 text-xs bg-muted/50 rounded px-2 py-1.5">
+                  <code className="font-mono font-medium text-primary">{item.cmd}</code>
+                  <span className="text-muted-foreground">{item.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Environment */}
       <Card>

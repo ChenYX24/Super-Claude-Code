@@ -31,12 +31,24 @@ const MODEL_NAMES: Record<string, string> = {
   "claude-opus-4-6": "Opus 4.6",
   "claude-sonnet-4-5": "Sonnet 4.5",
   "claude-haiku-4-5": "Haiku 4.5",
+  "gpt-5.2-codex": "GPT-5.2",
+  "gpt-5.3-codex": "GPT-5.3",
+  "o3-pro": "o3-Pro",
+  "o3": "o3",
+  "o4-mini": "o4-Mini",
+  "gpt-4.1": "GPT-4.1",
 };
 
 const MODEL_COLORS: Record<string, string> = {
   "claude-opus-4-6": "#6366f1",
   "claude-sonnet-4-5": "#22c55e",
   "claude-haiku-4-5": "#f59e0b",
+  "gpt-5.2-codex": "#10b981",
+  "gpt-5.3-codex": "#06b6d4",
+  "o3-pro": "#8b5cf6",
+  "o3": "#a78bfa",
+  "o4-mini": "#f472b6",
+  "gpt-4.1": "#34d399",
 };
 
 // Custom Tooltip for dark mode support
@@ -367,10 +379,25 @@ export default function TokensPage() {
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Info className="h-4 w-4" />Pricing Reference</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
+              <div className="text-xs font-medium text-muted-foreground mb-1">Claude</div>
               {[
                 { name: "Opus 4.6", input: 15, output: 75, tier: "High", color: "destructive" as const },
                 { name: "Sonnet 4.5", input: 3, output: 15, tier: "Mid", color: "secondary" as const },
                 { name: "Haiku 4.5", input: 0.8, output: 4, tier: "Low", color: "outline" as const },
+              ].map(m => (
+                <div key={m.name} className="flex items-center gap-3 text-sm">
+                  <span className="w-24 font-mono font-medium">{m.name}</span>
+                  <span className="text-muted-foreground">${m.input}/M in</span>
+                  <span className="text-muted-foreground">${m.output}/M out</span>
+                  <Badge variant={m.color} className="ml-auto text-xs">{m.tier}</Badge>
+                </div>
+              ))}
+              <div className="text-xs font-medium text-muted-foreground mt-4 mb-1">Codex (OpenAI)</div>
+              {[
+                { name: "o3-Pro", input: 20, output: 80, tier: "High", color: "destructive" as const },
+                { name: "o3", input: 10, output: 40, tier: "Mid", color: "secondary" as const },
+                { name: "GPT-5.2", input: 2, output: 8, tier: "Low", color: "outline" as const },
+                { name: "o4-Mini", input: 1.1, output: 4.4, tier: "Low", color: "outline" as const },
               ].map(m => (
                 <div key={m.name} className="flex items-center gap-3 text-sm">
                   <span className="w-24 font-mono font-medium">{m.name}</span>

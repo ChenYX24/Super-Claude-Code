@@ -29,6 +29,7 @@ export interface CommandInfo {
   description: string;
   content: string;
   path: string;
+  provider: ToolboxProvider;
 }
 
 export interface AgentInfo {
@@ -151,6 +152,7 @@ export function listCommands(): CommandInfo[] {
         description: meta.description || body.split("\n")[0] || "",
         content: body,
         path: filePath,
+        provider: "claude",
       });
     }
   } catch { /* skip */ }
@@ -176,6 +178,31 @@ export function listAgents(): AgentInfo[] {
         content: body,
         path: filePath,
         provider: "claude",
+      });
+    }
+  } catch { /* skip */ }
+  return agents;
+}
+
+// ---- Codex Agents ----
+
+export function listCodexAgents(): AgentInfo[] {
+  const agentsDir = path.join(CODEX_DIR, "agents");
+  if (!dirExists(agentsDir)) return [];
+
+  const agents: AgentInfo[] = [];
+  try {
+    for (const file of fs.readdirSync(agentsDir)) {
+      if (!file.endsWith(".md")) continue;
+      const filePath = path.join(agentsDir, file);
+      const raw = safeReadFile(filePath);
+      const { meta, body } = parseFrontmatter(raw);
+      agents.push({
+        name: meta.name || file.replace(".md", ""),
+        description: meta.description || body.split("\n")[0] || "",
+        content: body,
+        path: filePath,
+        provider: "codex",
       });
     }
   } catch { /* skip */ }
@@ -225,6 +252,9 @@ export function listRules(): RuleInfo[] {
 export function getHooksConfig(): HookEntry[] {
   const hooks: HookEntry[] = [];
 
+  // NOTE: Currently only reads hooks from ~/.claude/settings.json.
+  // Codex CLI does not use the same hooks format, so Codex hooks are not supported here.
+
   // Read from settings.json
   if (fs.existsSync(SETTINGS_FILE)) {
     try {
@@ -272,6 +302,31 @@ export function getHooksConfig(): HookEntry[] {
   }
 
   return hooks.filter(h => h.command && h.command.trim());
+}
+
+// ---- Codex Commands ----
+
+export function listCodexCommands(): CommandInfo[] {
+  const commandsDir = path.join(CODEX_DIR, "commands");
+  if (!dirExists(commandsDir)) return [];
+
+  const commands: CommandInfo[] = [];
+  try {
+    for (const file of fs.readdirSync(commandsDir)) {
+      if (!file.endsWith(".md")) continue;
+      const filePath = path.join(commandsDir, file);
+      const raw = safeReadFile(filePath);
+      const { meta, body } = parseFrontmatter(raw);
+      commands.push({
+        name: meta.name || file.replace(".md", ""),
+        description: meta.description || body.split("\n")[0] || "",
+        content: body,
+        path: filePath,
+        provider: "codex",
+      });
+    }
+  } catch { /* skip */ }
+  return commands;
 }
 
 // ---- Codex Skills ----
@@ -340,8 +395,8 @@ export function listCodexRules(): RuleInfo[] {
 export function getToolboxData(): ToolboxData {
   return {
     skills: [...listSkills(), ...listCodexSkills()],
-    commands: listCommands(),
-    agents: listAgents(),
+    commands: [...listCommands(), ...listCodexCommands()],
+    agents: [...listAgents(), ...listCodexAgents()],
     rules: [...listRules(), ...listCodexRules()],
     hooks: getHooksConfig(),
   };

@@ -28,6 +28,7 @@ export interface CommandInfo {
   description: string;
   content: string;
   path: string;
+  provider?: ToolboxProvider;
 }
 
 export interface AgentInfo {

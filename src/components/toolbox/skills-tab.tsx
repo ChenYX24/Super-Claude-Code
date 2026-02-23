@@ -21,6 +21,7 @@ import { useRouter } from "next/navigation";
 import { OnlineSearch } from "./online-search";
 import { useCommunityTemplates } from "@/hooks/use-community-templates";
 import type { RemoteTemplate } from "@/lib/remote-registry";
+import { ProviderFilter, filterByProvider } from "./provider-filter";
 import type { SkillInfo, CommandInfo } from "./types";
 
 interface ExpandableCardProps {
@@ -75,9 +76,13 @@ export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<SkillInfo | null>(null);
 
+  const [providerFilter, setProviderFilter] = useState<"all" | "claude" | "codex">("all");
+
   const community = useCommunityTemplates();
   const [communitySearchQuery, setCommunitySearchQuery] = useState("");
 
+  const filteredSkills = filterByProvider(skills, providerFilter);
+  const filteredCommands = filterByProvider(commands, providerFilter);
   const installedNames = new Set(skills.map(s => s.name));
 
   const filteredTemplates = SKILL_TEMPLATES.filter((template) => {
@@ -193,13 +198,16 @@ export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
         {/* Installed Skills */}
         {skills.length > 0 && (
           <section>
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4 text-amber-500" />
-              <span className="text-sm font-semibold">Installed Skills</span>
-              <Badge variant="outline" className="text-xs">{skills.length}</Badge>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                <span className="text-sm font-semibold">Installed Skills</span>
+                <Badge variant="outline" className="text-xs">{filteredSkills.length}</Badge>
+              </div>
+              <ProviderFilter value={providerFilter} onChange={setProviderFilter} items={[...skills, ...commands]} />
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-              {skills.map((skill) => (
+              {filteredSkills.map((skill) => (
                 <div key={skill.name} className="group relative">
                   <Card className="hover:shadow-md transition-shadow">
                     <CardHeader className="pb-2">
@@ -270,10 +278,10 @@ export function SkillsTab({ skills, commands, onRefresh }: SkillsTabProps) {
             <div className="flex items-center gap-2 mb-3">
               <Command className="h-4 w-4 text-purple-500" />
               <span className="text-sm font-semibold">Slash Commands</span>
-              <Badge variant="outline" className="text-xs">{commands.length}</Badge>
+              <Badge variant="outline" className="text-xs">{filteredCommands.length}</Badge>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-              {commands.map((cmd) => (
+              {filteredCommands.map((cmd) => (
                 <ExpandableCard
                   key={cmd.name}
                   title={`/${cmd.name}`}

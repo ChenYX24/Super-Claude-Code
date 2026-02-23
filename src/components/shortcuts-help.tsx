@@ -14,7 +14,7 @@ const SHORTCUTS = [
       { keys: ["4"], description: "Chat" },
       { keys: ["5"], description: "Tokens" },
       { keys: ["6"], description: "Toolbox" },
-      { keys: ["7"], description: "CLAUDE.md" },
+      { keys: ["7"], description: "Instructions" },
       { keys: ["8"], description: "Settings" },
     ],
   },
