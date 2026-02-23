@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useCallback, useRef, type ReactNode } from "react";
+import { useState, useCallback, useRef, memo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, FileSpreadsheet, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function extractText(node: ReactNode): string {
@@ -26,6 +26,55 @@ function extractLanguage(children: ReactNode): string | null {
     return match ? match[1] : null;
   }
   return null;
+}
+
+/** Extract table data from a rendered HTML table element */
+function extractTableData(tableEl: HTMLTableElement): string[][] {
+  const rows: string[][] = [];
+  for (const tr of Array.from(tableEl.querySelectorAll("tr"))) {
+    const cells: string[] = [];
+    for (const cell of Array.from(tr.querySelectorAll("th, td"))) {
+      cells.push((cell as HTMLElement).innerText.trim());
+    }
+    if (cells.length > 0) rows.push(cells);
+  }
+  return rows;
+}
+
+/** Convert table data to Markdown format */
+function toMarkdown(data: string[][]): string {
+  if (data.length === 0) return "";
+  const header = data[0];
+  const widths = header.map((h, i) =>
+    Math.max(h.length, ...data.slice(1).map((r) => (r[i] || "").length), 3)
+  );
+  const pad = (s: string, w: number) => s + " ".repeat(Math.max(0, w - s.length));
+  const lines: string[] = [];
+  lines.push("| " + header.map((h, i) => pad(h, widths[i])).join(" | ") + " |");
+  lines.push("| " + widths.map((w) => "-".repeat(w)).join(" | ") + " |");
+  for (const row of data.slice(1)) {
+    lines.push("| " + row.map((c, i) => pad(c || "", widths[i])).join(" | ") + " |");
+  }
+  return lines.join("\n");
+}
+
+/** Convert table data to CSV format */
+function toCsv(data: string[][]): string {
+  return data
+    .map((row) =>
+      row.map((cell) => {
+        if (cell.includes(",") || cell.includes('"') || cell.includes("\n")) {
+          return `"${cell.replace(/"/g, '""')}"`;
+        }
+        return cell;
+      }).join(",")
+    )
+    .join("\n");
+}
+
+/** Convert table data to TSV (Excel-compatible) format */
+function toTsv(data: string[][]): string {
+  return data.map((row) => row.join("\t")).join("\n");
 }
 
 function CodeBlockWrapper({ children }: { children: ReactNode }) {
@@ -72,7 +121,71 @@ function CodeBlockWrapper({ children }: { children: ReactNode }) {
   );
 }
 
-export function MarkdownContent({
+type CopyFormat = "md" | "csv" | "tsv" | null;
+
+function TableWrapper({ children }: { children: ReactNode }) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [copiedFormat, setCopiedFormat] = useState<CopyFormat>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleCopy = useCallback((format: "md" | "csv" | "tsv") => {
+    if (!tableRef.current) return;
+    const data = extractTableData(tableRef.current);
+    if (data.length === 0) return;
+
+    let text: string;
+    switch (format) {
+      case "md": text = toMarkdown(data); break;
+      case "csv": text = toCsv(data); break;
+      case "tsv": text = toTsv(data); break;
+    }
+
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedFormat(format);
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopiedFormat(null), 1500);
+    });
+  }, []);
+
+  return (
+    <div className="relative group my-2">
+      <div className="overflow-x-auto border rounded-lg">
+        <table ref={tableRef} className="text-xs w-full">{children}</table>
+      </div>
+      <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => handleCopy("md")}
+          className="text-muted-foreground h-6 px-1.5 text-[10px]"
+          title="Copy as Markdown"
+        >
+          {copiedFormat === "md" ? <Check className="size-3 text-green-500" /> : <><FileText className="size-3 mr-0.5" />MD</>}
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => handleCopy("csv")}
+          className="text-muted-foreground h-6 px-1.5 text-[10px]"
+          title="Copy as CSV"
+        >
+          {copiedFormat === "csv" ? <Check className="size-3 text-green-500" /> : <><Copy className="size-3 mr-0.5" />CSV</>}
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => handleCopy("tsv")}
+          className="text-muted-foreground h-6 px-1.5 text-[10px]"
+          title="Copy as TSV (Excel)"
+        >
+          {copiedFormat === "tsv" ? <Check className="size-3 text-green-500" /> : <><FileSpreadsheet className="size-3 mr-0.5" />Excel</>}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export const MarkdownContent = memo(function MarkdownContent({
   content,
   className = "",
 }: {
@@ -120,9 +233,15 @@ export function MarkdownContent({
             </a>
           ),
           table: ({ children }) => (
-            <div className="overflow-x-auto">
-              <table className="text-xs">{children}</table>
-            </div>
+            <TableWrapper>{children}</TableWrapper>
+          ),
+          th: ({ children }) => (
+            <th className="px-3 py-2 text-left font-semibold bg-muted/50 border-b border-border whitespace-nowrap">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="px-3 py-1.5 border-b border-border/50">{children}</td>
           ),
         }}
       >
@@ -130,4 +249,4 @@ export function MarkdownContent({
       </ReactMarkdown>
     </div>
   );
-}
+});

@@ -21,12 +21,20 @@ function findCodexBinary(): string {
 
 export class CodexProvider implements CliProvider {
   readonly name = "codex";
-  readonly displayName = "OpenAI Codex CLI";
+  readonly displayName = "OpenAI Codex";
 
   isAvailable(): boolean {
     const binary = findCodexBinary();
     if (binary === "codex" || binary === "codex.exe") {
-      return true; // Assume PATH lookup will work; spawn will fail if not
+      // PATH fallback — check if it actually exists via common paths
+      try {
+        const { execSync } = require("child_process");
+        const which = process.platform === "win32" ? "where" : "which";
+        execSync(`${which} codex`, { stdio: "ignore" });
+        return true;
+      } catch {
+        return false;
+      }
     }
     return existsSync(binary);
   }
@@ -45,22 +53,20 @@ export class CodexProvider implements CliProvider {
     options: SpawnOptions
   ): { binary: string; args: string[]; env: Record<string, string | undefined> } {
     const binary = findCodexBinary();
-    const args: string[] = [];
+    // Non-interactive mode: codex exec [options] "prompt"
+    const args: string[] = ["exec", "--json", "--skip-git-repo-check"];
 
-    // Codex CLI uses: codex --full-auto "prompt" or codex -q "prompt"
     // Approval mode mapping
     if (options.permissionMode === "trust") {
       args.push("--full-auto");
-    } else if (options.permissionMode === "acceptEdits") {
-      args.push("--auto-edit");
     }
 
     if (options.model) {
       args.push("--model", options.model);
     }
 
-    // The prompt is the positional argument
-    args.push("-q", prompt);
+    // Prompt is the positional argument (must come last)
+    args.push(prompt);
 
     const env: Record<string, string | undefined> = { ...process.env };
 
@@ -73,69 +79,100 @@ export class CodexProvider implements CliProvider {
 
     try {
       const parsed = JSON.parse(trimmed);
-
-      // Map Codex event types to normalized ProviderEvent types
       const codexType = parsed.type as string;
 
+      // Codex JSONL event types:
+      // thread.started, turn.started, item.completed, turn.completed, error
+
       if (codexType === "error") {
-        return { type: "error", raw: parsed };
+        return { type: "error", raw: { type: "error", error: parsed.message || parsed.error || "Codex error" } };
       }
 
-      // Codex uses different event names — normalize to our schema
-      // "message.start", "message.delta", "message.complete" etc.
-      if (codexType?.startsWith("message") || codexType === "response") {
-        // Map to assistant event with content structure
+      if (codexType === "thread.started") {
+        // Map to system init event
         return {
-          type: "assistant",
+          type: "system",
           raw: {
-            type: "assistant",
-            message: {
-              content: [
-                {
-                  type: "text",
-                  text: parsed.content || parsed.text || parsed.delta?.text || "",
-                },
-              ],
-            },
+            type: "system",
+            session_id: parsed.thread_id,
           },
         };
       }
 
-      if (codexType === "tool_call" || codexType === "function_call") {
-        return {
-          type: "assistant",
-          raw: {
+      if (codexType === "item.completed") {
+        const item = parsed.item;
+        if (!item) return null;
+
+        if (item.type === "agent_message") {
+          return {
             type: "assistant",
-            message: {
-              content: [
-                {
-                  type: "tool_use",
-                  name: parsed.name || parsed.function?.name || "unknown_tool",
-                  input: parsed.arguments || parsed.function?.arguments || {},
-                },
-              ],
+            raw: {
+              type: "assistant",
+              message: {
+                content: [{ type: "text", text: item.text || "" }],
+              },
             },
-          },
-        };
+          };
+        }
+
+        if (item.type === "reasoning") {
+          return {
+            type: "assistant",
+            raw: {
+              type: "assistant",
+              message: {
+                content: [{ type: "thinking", thinking: item.text || "" }],
+              },
+            },
+          };
+        }
+
+        if (item.type === "tool_call" || item.type === "function_call") {
+          return {
+            type: "assistant",
+            raw: {
+              type: "assistant",
+              message: {
+                content: [
+                  {
+                    type: "tool_use",
+                    name: item.name || item.function?.name || "tool",
+                    input: JSON.stringify(item.arguments || item.input || {}),
+                  },
+                ],
+              },
+            },
+          };
+        }
+
+        // Other item types — skip
+        return null;
       }
 
-      if (codexType === "done" || codexType === "complete") {
+      if (codexType === "turn.completed") {
+        const usage = parsed.usage;
         return {
           type: "result",
           raw: {
             type: "result",
-            result: parsed.result || parsed.output || "",
-            cost_usd: parsed.cost_usd,
-            duration_ms: parsed.duration_ms,
-            session_id: parsed.session_id,
+            result: "",
+            session_id: parsed.thread_id,
+            usage: usage ? {
+              input_tokens: usage.input_tokens,
+              output_tokens: usage.output_tokens,
+              cache_read_input_tokens: usage.cached_input_tokens,
+            } : undefined,
           },
         };
       }
 
-      // Fallback: forward as-is
-      return { type: "assistant", raw: parsed };
+      // Skip: turn.started, etc.
+      return null;
     } catch {
-      // Not JSON — treat as plain text response
+      // Not JSON — treat as plain text
+      if (trimmed.startsWith("Not inside a trusted")) {
+        return { type: "error", raw: { type: "error", error: trimmed } };
+      }
       return {
         type: "assistant",
         raw: {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, ChevronUp, HardDrive, FileText, Columns2 } from "lucide-react";
+import { FolderOpen, ChevronUp, HardDrive, FileText, Columns2, Cpu } from "lucide-react";
 import type { PermissionMode } from "@/lib/chat-types";
 import { ProviderSelector } from "./provider-selector";
 
@@ -36,10 +36,16 @@ interface ChatWorkspaceBarProps {
   onPermissionModeChange: (mode: PermissionMode) => void;
   provider: string;
   onProviderChange: (provider: string) => void;
+  model: string;
+  onModelChange: (model: string) => void;
   compareMode?: boolean;
   onCompareModeChange?: (enabled: boolean) => void;
+  compareDisabled?: boolean;
   disabled?: boolean;
 }
+
+/** Available models per provider — fetched once */
+const PROVIDER_MODELS: Record<string, string[]> = {};
 
 export function ChatWorkspaceBar({
   cwd,
@@ -48,10 +54,37 @@ export function ChatWorkspaceBar({
   onPermissionModeChange,
   provider,
   onProviderChange,
+  model,
+  onModelChange,
   compareMode,
   onCompareModeChange,
+  compareDisabled,
   disabled,
 }: ChatWorkspaceBarProps) {
+  const [providerModels, setProviderModels] = useState<Record<string, string[]>>(PROVIDER_MODELS);
+
+  // Fetch provider models once
+  useEffect(() => {
+    if (Object.keys(PROVIDER_MODELS).length > 0) {
+      setProviderModels(PROVIDER_MODELS);
+      return;
+    }
+    fetch("/api/providers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.providers) {
+          const models: Record<string, string[]> = {};
+          for (const p of data.providers) {
+            models[p.name] = p.capabilities?.models || [];
+          }
+          Object.assign(PROVIDER_MODELS, models);
+          setProviderModels({ ...models });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const currentModels = providerModels[provider] || [];
   const [browserOpen, setBrowserOpen] = useState(false);
   const [browseData, setBrowseData] = useState<BrowseResult | null>(null);
   const [browseLoading, setBrowseLoading] = useState(false);
@@ -106,7 +139,7 @@ export function ChatWorkspaceBar({
 
   return (
     <div className="border-t bg-muted/20 px-4 py-1.5 flex-shrink-0">
-      <div className="max-w-4xl mx-auto flex items-center gap-2">
+      <div className={`flex items-center gap-2 ${compareMode ? "" : "max-w-4xl mx-auto"}`}>
         {/* Folder selector */}
         <div className="relative flex-1 min-w-0" ref={popoverRef}>
           <button
@@ -201,6 +234,27 @@ export function ChatWorkspaceBar({
           disabled={disabled}
         />
 
+        {/* Model selector */}
+        {currentModels.length > 0 && (
+          <div className="flex items-center gap-1">
+            <Cpu className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+            <select
+              value={model}
+              onChange={(e) => onModelChange(e.target.value)}
+              disabled={disabled}
+              className="text-xs bg-muted border rounded-md px-2 py-1 focus:outline-none focus:ring-1 focus:ring-primary/50 disabled:opacity-50 cursor-pointer max-w-[140px]"
+              title="Model"
+            >
+              <option value="">Default</option>
+              {currentModels.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Permission mode selector */}
         <select
           value={permissionMode}
@@ -223,8 +277,8 @@ export function ChatWorkspaceBar({
             size="sm"
             className="h-7 px-2 text-xs"
             onClick={() => onCompareModeChange(!compareMode)}
-            disabled={disabled}
-            title="Compare two providers side-by-side"
+            disabled={disabled || (!compareMode && compareDisabled)}
+            title={compareDisabled && !compareMode ? "Codex CLI not available — install to enable compare" : "Compare two providers side-by-side"}
           >
             <Columns2 className="h-3.5 w-3.5 mr-1" />
             Compare

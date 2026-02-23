@@ -927,28 +927,28 @@ export default function ToolboxPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Wrench className="h-6 w-6" />
             Toolbox
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1 hidden sm:block">
             Claude Code configuration center — MCP servers, skills, hooks, agents & rules
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" className="gap-1.5" onClick={() => setShowAiCreator(true)}>
-            <Wand2 className="h-4 w-4" /> AI Create
+            <Wand2 className="h-4 w-4" /> <span className="hidden sm:inline">AI</span> Create
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowImport(true)}>
-            <Upload className="h-4 w-4" /> Import
+            <Upload className="h-4 w-4" /> <span className="hidden sm:inline">Import</span>
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowExport(true)}>
-            <Download className="h-4 w-4" /> Export
+            <Download className="h-4 w-4" /> <span className="hidden sm:inline">Export</span>
           </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowHelp(true)}>
-            <HelpCircle className="h-4 w-4" /> Help
+            <HelpCircle className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -961,25 +961,25 @@ export default function ToolboxPage() {
         <TabsList className="w-full sm:w-auto overflow-x-auto">
           <TabsTrigger value="mcp" className="gap-1.5 touch-manipulation">
             <Plug className="h-3.5 w-3.5" /> MCP
-            {mcpCount > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{mcpCount}</Badge>}
+            {mcpCount > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5 hidden sm:inline-flex">{mcpCount}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="skills" className="gap-1.5 touch-manipulation">
             <Sparkles className="h-3.5 w-3.5" /> Skills
             {(data.skills.length + data.commands.length) > 0 && (
-              <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.skills.length + data.commands.length}</Badge>
+              <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5 hidden sm:inline-flex">{data.skills.length + data.commands.length}</Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="hooks" className="gap-1.5 touch-manipulation">
             <Shield className="h-3.5 w-3.5" /> Hooks
-            {data.hooks.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.hooks.length}</Badge>}
+            {data.hooks.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5 hidden sm:inline-flex">{data.hooks.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="agents" className="gap-1.5 touch-manipulation">
             <Bot className="h-3.5 w-3.5" /> Agents
-            {data.agents.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.agents.length}</Badge>}
+            {data.agents.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5 hidden sm:inline-flex">{data.agents.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="rules" className="gap-1.5 touch-manipulation">
             <BookOpen className="h-3.5 w-3.5" /> Rules
-            {data.rules.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5">{data.rules.length}</Badge>}
+            {data.rules.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1 ml-0.5 hidden sm:inline-flex">{data.rules.length}</Badge>}
           </TabsTrigger>
         </TabsList>
 

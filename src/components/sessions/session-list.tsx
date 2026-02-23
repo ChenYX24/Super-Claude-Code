@@ -197,7 +197,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
           <Star className="h-4 w-4 mr-2" fill={showFavoritesOnly ? "currentColor" : "none"} />
           Favorites
         </Button>
-        <div className="relative flex-1 max-w-md min-w-[200px]">
+        <div className="relative flex-1 max-w-md min-w-[150px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
@@ -218,7 +218,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
           )}
         </div>
         <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="w-[140px] sm:w-[180px]">
             <ArrowUpDown className="h-4 w-4 mr-2" />
             <SelectValue />
           </SelectTrigger>
@@ -311,7 +311,7 @@ export function SessionList({ data, onSelect, onRefresh, refreshing }: {
       </div>
 
       {viewMode === "grid" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {paginatedSessions.map(s => (
             <SessionBlock
               key={`${s.project}-${s.id}`}

@@ -56,11 +56,32 @@ function ChatPageContent() {
   const [cliModel, setCliModel] = useState<string>("");
 
   // Workspace settings (cwd + permission mode)
-  const [chatCwd, setChatCwd] = useState<string>("");
+  const DEFAULT_CWD = "E:\\claude-projects";
+  const [chatCwd, setChatCwd] = useState<string>(DEFAULT_CWD);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>("default");
   const [chatProvider, setChatProvider] = useState<string>("claude");
+  const [chatModel, setChatModel] = useState<string>("");
   const [compareMode, setCompareMode] = useState(false);
   const [compareRightProvider, setCompareRightProvider] = useState<string>("codex");
+
+  // Available providers (fetched once to validate provider selection)
+  const [availableProviders, setAvailableProviders] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    fetch("/api/providers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.providers) {
+          const avail = new Set<string>(
+            data.providers.filter((p: { available: boolean }) => p.available).map((p: { name: string }) => p.name)
+          );
+          setAvailableProviders(avail);
+        }
+      })
+      .catch(() => {
+        setAvailableProviders(new Set(["claude"]));
+      });
+  }, []);
 
   // Sync from localStorage after mount (avoids SSR hydration mismatch)
   useEffect(() => {
@@ -68,11 +89,22 @@ function ChatPageContent() {
     const savedPermission = localStorage.getItem("chat-permission-mode") as PermissionMode | null;
     const savedProvider = localStorage.getItem("chat-provider");
     const savedCompareRight = localStorage.getItem("chat-compare-right");
+    const savedModel = localStorage.getItem("chat-model");
     if (savedCwd) setChatCwd(savedCwd);
     if (savedPermission) setPermissionMode(savedPermission);
     if (savedProvider) setChatProvider(savedProvider);
+    if (savedModel) setChatModel(savedModel);
     if (savedCompareRight) setCompareRightProvider(savedCompareRight);
   }, []);
+
+  // Once available providers are known, validate current selection
+  useEffect(() => {
+    if (!availableProviders) return; // still loading
+    if (!availableProviders.has(chatProvider)) {
+      setChatProvider("claude");
+      localStorage.setItem("chat-provider", "claude");
+    }
+  }, [availableProviders, chatProvider]);
 
   // Streaming hook
   const {
@@ -119,10 +151,13 @@ function ChatPageContent() {
   );
   const showCommandMenu = chatInput.startsWith("/") && !chatSending && !cmdMenuDismissed;
 
+  // Track whether user manually cleared the session (to avoid URL re-triggering)
+  const manualClearRef = useRef(false);
+
   // URL deep-linking
   useEffect(() => {
     const sessionParam = searchParams.get("session");
-    if (sessionParam && !selectedSessionKey) {
+    if (sessionParam && !selectedSessionKey && !manualClearRef.current) {
       setSelectedSessionKey(sessionParam);
       setChatMode("session");
     }
@@ -153,9 +188,9 @@ function ChatPageContent() {
     clearMessages();
     setClaudeSessionId("");
 
-    // Auto-set provider based on session's provider
+    // Auto-set provider based on session's provider (only if available)
     const isCodexSession = selectedSessionKey.startsWith("__codex__|");
-    const sessionProvider = isCodexSession ? "codex" : "claude";
+    const sessionProvider = isCodexSession && availableProviders?.has("codex") ? "codex" : "claude";
     setChatProvider(sessionProvider);
     localStorage.setItem("chat-provider", sessionProvider);
 
@@ -226,11 +261,11 @@ function ChatPageContent() {
     }
   }, [sessionDetail, chatMessages]);
 
-  const handleScroll = () => {
+  const handleScroll = useCallback(() => {
     if (!chatContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
     setShowScrollButton(scrollHeight - scrollTop - clientHeight > 100);
-  };
+  }, []);
 
   // Visible messages (filter empty)
   const visible = useMemo(() => {
@@ -243,7 +278,7 @@ function ChatPageContent() {
   }, [sessionDetail]);
 
   // Search logic
-  const convSearchLower = convSearch.trim().toLowerCase();
+  const convSearchLower = useMemo(() => convSearch.trim().toLowerCase(), [convSearch]);
   const matchedIndices = useMemo(() => {
     if (!convSearchLower) return [];
     return visible
@@ -403,8 +438,9 @@ function ChatPageContent() {
       cwd: chatCwd || undefined,
       permissionMode,
       provider: chatProvider,
+      model: chatModel || undefined,
     });
-  }, [chatSending, activeSessionId, chatSend, chatCwd, permissionMode, chatProvider]);
+  }, [chatSending, activeSessionId, chatSend, chatCwd, permissionMode, chatProvider, chatModel]);
 
   // Handle ?run= parameter from Toolbox Run buttons
   const runHandledRef = useRef(false);
@@ -434,7 +470,7 @@ function ChatPageContent() {
     }
   }, [executeBuiltinCommand, handleSend]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // ESC during sending → cancel takes priority
     if (e.key === "Escape" && chatSending) {
       e.preventDefault();
@@ -443,7 +479,7 @@ function ChatPageContent() {
     }
 
     if (showCommandMenu) {
-      const flat = getFlatFilteredCommands(allCommands, chatInput);
+      const flat = getFlatFilteredCommands(allCommands, chatInputRef.current);
 
       if (e.key === "ArrowUp" && flat.length > 0) {
         e.preventDefault();
@@ -473,9 +509,10 @@ function ChatPageContent() {
       e.preventDefault();
       handleSend();
     }
-  };
+  }, [chatSending, chatCancel, showCommandMenu, allCommands, cmdMenuIndex, handleCommandSelect, handleSend]);
 
   const startNewChat = () => {
+    manualClearRef.current = true; // Prevent URL effect from re-selecting
     setSelectedSessionKey("");
     setSessionDetail(null);
     clearMessages();
@@ -484,7 +521,10 @@ function ChatPageContent() {
     setClaudeSessionId("");
     // Clear URL query params so the session deep-link effect doesn't re-select
     router.replace("/chat", { scroll: false });
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      manualClearRef.current = false; // Allow future URL deep-links
+    }, 500);
   };
 
   const isSessionActive = useMemo(() => {
@@ -514,7 +554,7 @@ function ChatPageContent() {
           selectedKey={selectedSessionKey}
           onSelect={setSelectedSessionKey}
           collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
           loading={loadingSessions}
           onNewChat={startNewChat}
           isChatMode={chatMode === "chat"}
@@ -764,7 +804,7 @@ function ChatPageContent() {
                     </div>
                   </div>
                 ) : (
-                  <LiveAssistantMessage key={msg.id} message={msg} showTools={showTools} />
+                  <LiveAssistantMessage key={msg.id} message={msg} showTools={showTools} providerLabel={chatProvider === "codex" ? "Codex" : "Claude"} />
                 )
               )}
             </div>
@@ -778,6 +818,7 @@ function ChatPageContent() {
             elapsedMs={elapsedMs}
             toolName={lastToolName}
             onCancel={chatCancel}
+            providerLabel={chatProvider === "codex" ? "Codex" : "Claude"}
           />
         )}
 
@@ -798,12 +839,21 @@ function ChatPageContent() {
           permissionMode={permissionMode}
           onPermissionModeChange={(m) => { setPermissionMode(m); localStorage.setItem("chat-permission-mode", m); }}
           provider={chatProvider}
-          onProviderChange={(p) => { setChatProvider(p); localStorage.setItem("chat-provider", p); }}
+          onProviderChange={(p) => { setChatProvider(p); localStorage.setItem("chat-provider", p); setChatModel(""); }}
+          model={chatModel}
+          onModelChange={(m) => { setChatModel(m); localStorage.setItem("chat-model", m); }}
           compareMode={compareMode}
           onCompareModeChange={(enabled) => {
+            if (enabled) {
+              // Force left=claude, right=codex for compare
+              setChatProvider("claude");
+              setCompareRightProvider("codex");
+              localStorage.setItem("chat-provider", "claude");
+              setChatMode("chat");
+            }
             setCompareMode(enabled);
-            if (enabled) setChatMode("chat");
           }}
+          compareDisabled={!availableProviders?.has("codex")}
           disabled={chatSending}
         />
 

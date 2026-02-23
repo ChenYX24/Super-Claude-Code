@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Dialog as DialogPrimitive } from "radix-ui";
+import { Dialog as DialogPrimitive, VisuallyHidden } from "radix-ui";
 import {
   Search,
   LayoutDashboard,
@@ -370,6 +370,9 @@ export function CommandPalette() {
             inputRef.current?.focus();
           }}
         >
+          <VisuallyHidden.Root>
+            <DialogPrimitive.Title>Command Palette</DialogPrimitive.Title>
+          </VisuallyHidden.Root>
           {/* Search Input */}
           <div className="flex items-center gap-2 border-b px-4 py-3">
             <Search className="h-4 w-4 text-muted-foreground shrink-0" />

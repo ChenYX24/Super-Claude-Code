@@ -61,8 +61,8 @@ export class ClaudeProvider implements CliProvider {
     const binary = findClaudeBinary();
     const args = ["-p", prompt, "--output-format", "stream-json", "--verbose"];
 
-    if (options.sessionId) {
-      args.push("--resume", options.sessionId);
+    if (options.sessionId && typeof options.sessionId === "string" && options.sessionId.trim()) {
+      args.push("--resume", options.sessionId.trim());
     }
 
     if (options.model) {
@@ -121,8 +121,8 @@ export class ClaudeProvider implements CliProvider {
         return { type, raw: parsed };
       }
 
-      // Unknown event type — still forward it
-      return { type: "assistant", raw: parsed };
+      // Skip non-essential events (rate_limit_event, etc.)
+      return null;
     } catch {
       return null;
     }

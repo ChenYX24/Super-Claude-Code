@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownContent } from "@/components/markdown-content";
 import {
@@ -49,13 +49,14 @@ export const DEFAULT_TOOL_CONFIG = {
 };
 
 // Conversation Message Component
-export function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch, isLive, phaseBadge }: {
+export const ConvMessage = memo(function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch, isLive, phaseBadge, assistantLabel }: {
   msg: SessionMessage;
   showTools: boolean;
   searchHighlight?: string;
   isSearchMatch?: boolean;
   isLive?: boolean;
   phaseBadge?: string;
+  assistantLabel?: string;
 }) {
   const [thinkingExpanded, setThinkingExpanded] = useState(false);
   const [expandedTools, setExpandedTools] = useState<Set<number>>(new Set());
@@ -95,7 +96,7 @@ export function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch, is
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-semibold">{isUser ? "You" : "Claude"}</span>
+          <span className="text-sm font-semibold">{isUser ? "You" : (assistantLabel || "Claude")}</span>
           {phaseBadge && (
             <span className="text-xs text-amber-600 dark:text-amber-400 animate-pulse">{phaseBadge}</span>
           )}
@@ -248,4 +249,4 @@ export function ConvMessage({ msg, showTools, searchHighlight, isSearchMatch, is
       </div>
     </div>
   );
-}
+});

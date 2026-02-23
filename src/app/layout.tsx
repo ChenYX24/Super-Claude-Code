@@ -56,7 +56,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Providers>
-          <div className="flex h-screen">
+          <div className="flex h-dvh">
             <SidebarNav />
             <CommandPalette />
             <PwaRegister />

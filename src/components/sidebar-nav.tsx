@@ -178,7 +178,7 @@ export function SidebarNav() {
           inset-y-0 left-0
           z-40
           ${collapsed ? "lg:w-14" : "lg:w-56"}
-          w-64
+          w-64 max-w-[85vw]
           border-r
           bg-background
           ${collapsed ? "lg:px-2 lg:py-4 px-4 py-4" : "p-4"}
@@ -305,7 +305,7 @@ export function SidebarNav() {
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">v1.2.0</span>
+                <span className="text-xs text-muted-foreground">v2.0.0</span>
                 <Button
                   variant="ghost"
                   size="sm"

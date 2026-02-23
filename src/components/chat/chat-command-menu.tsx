@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { Terminal, Zap, Hash, Bot } from "lucide-react";
 import type { ChatCommand } from "@/lib/chat-commands";
 import { filterCommands, groupByCategory, CATEGORY_LABELS } from "@/lib/chat-commands";
@@ -27,7 +27,7 @@ const CATEGORY_BADGE_COLORS: Record<string, string> = {
   agent: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-800",
 };
 
-export function ChatCommandMenu({ input, commands, selectedIndex, onSelect }: ChatCommandMenuProps) {
+export const ChatCommandMenu = memo(function ChatCommandMenu({ input, commands, selectedIndex, onSelect }: ChatCommandMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const filtered = filterCommands(commands, input);
@@ -108,4 +108,4 @@ export function ChatCommandMenu({ input, commands, selectedIndex, onSelect }: Ch
       </div>
     </div>
   );
-}
+});

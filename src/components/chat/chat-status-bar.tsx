@@ -9,6 +9,7 @@ interface ChatStatusBarProps {
   elapsedMs: number;
   toolName?: string;
   onCancel: () => void;
+  providerLabel?: string;
 }
 
 const PHASE_ICON: Record<string, typeof Loader2> = {
@@ -17,7 +18,8 @@ const PHASE_ICON: Record<string, typeof Loader2> = {
   responding: Bot,
 };
 
-export function ChatStatusBar({ phase, elapsedMs, toolName, onCancel }: ChatStatusBarProps) {
+export function ChatStatusBar({ phase, elapsedMs, toolName, onCancel, providerLabel }: ChatStatusBarProps) {
+  const name = providerLabel || "Claude";
   const seconds = (elapsedMs / 1000).toFixed(1);
 
   // Choose icon based on phase
@@ -38,10 +40,10 @@ export function ChatStatusBar({ phase, elapsedMs, toolName, onCancel }: ChatStat
         ? "text-purple-500"
         : "text-muted-foreground";
     label = phase === "thinking"
-      ? "Thinking..."
+      ? `${name} is thinking...`
       : phase === "responding"
-        ? "Responding..."
-        : "Connecting...";
+        ? `${name} is responding...`
+        : `${name} is connecting...`;
   }
 
   return (

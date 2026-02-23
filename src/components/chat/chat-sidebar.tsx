@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { memo, useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ function getDateGroup(timestamp: number): Exclude<DateGroup, "Pinned"> {
 
 const GROUP_ORDER: DateGroup[] = ["Pinned", "Today", "Yesterday", "This Week", "Earlier"];
 
-export function ChatSidebar({
+export const ChatSidebar = memo(function ChatSidebar({
   sessions,
   selectedKey,
   onSelect,
@@ -307,4 +307,4 @@ export function ChatSidebar({
       </div>
     </div>
   );
-}
+});

@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ConvMessage } from "@/components/sessions/conv-message";
@@ -10,10 +11,12 @@ import { fmtCost } from "@/lib/format-utils";
 interface Props {
   message: LiveChatMessage;
   showTools: boolean;
+  providerLabel?: string;
 }
 
-export function LiveAssistantMessage({ message, showTools }: Props) {
+export const LiveAssistantMessage = memo(function LiveAssistantMessage({ message, showTools, providerLabel }: Props) {
   const { phase } = message;
+  const label = providerLabel || "Claude";
 
   // Connecting state — spinner only
   if (phase === "connecting") {
@@ -24,7 +27,7 @@ export function LiveAssistantMessage({ message, showTools }: Props) {
         </div>
         <div className="flex-1 min-w-0 flex items-center gap-2 text-sm text-muted-foreground py-1">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Claude Code is working...</span>
+          <span>{label} is working...</span>
         </div>
       </div>
     );
@@ -41,6 +44,7 @@ export function LiveAssistantMessage({ message, showTools }: Props) {
         showTools={showTools}
         isLive={isLive}
         phaseBadge={phaseBadge}
+        assistantLabel={label}
       />
       {/* Cancelled badge */}
       {phase === "cancelled" && (
@@ -59,4 +63,4 @@ export function LiveAssistantMessage({ message, showTools }: Props) {
       )}
     </div>
   );
-}
+});

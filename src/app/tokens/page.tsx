@@ -252,9 +252,9 @@ export default function TokensPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Token Usage & Cost</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Provider Filter */}
           <div className="flex border rounded-md">
             {(["all", "claude", "codex", "unknown"] as ProviderFilter[]).map((p) => (
@@ -270,12 +270,12 @@ export default function TokensPage() {
             ))}
           </div>
           <Button variant="outline" size="sm" onClick={() => handleExport("detail")}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Detail CSV
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export Detail CSV</span>
           </Button>
           <Button variant="outline" size="sm" onClick={() => handleExport("summary")}>
-            <Download className="h-4 w-4 mr-2" />
-            Export Summary CSV
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export Summary CSV</span>
           </Button>
         </div>
       </div>
@@ -293,7 +293,7 @@ export default function TokensPage() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4">
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground flex items-center gap-2"><DollarSign className="h-4 w-4" />Total Cost</CardTitle></CardHeader>
           <CardContent><div className="text-3xl font-bold text-primary">{fmtCost(data.totalCost)}</div></CardContent>

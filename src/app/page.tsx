@@ -140,7 +140,7 @@ export default function HomePage() {
         <h1 className="text-2xl font-bold">Overview</h1>
 
         {/* Stats Cards Skeleton */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
           {[...Array(6)].map((_, i) => (
             <Card key={i}>
               <CardHeader className="pb-2">
@@ -237,7 +237,7 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Overview</h1>
         <div className="flex items-center gap-1 bg-muted/50 rounded-full p-0.5">
           {(["all", "claude", "codex"] as const).map((opt) => (
@@ -257,7 +257,7 @@ export default function HomePage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">

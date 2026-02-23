@@ -10,6 +10,7 @@ export interface ChatSendOptions {
   permissionMode?: PermissionMode;
   allowedTools?: string[];
   provider?: string;
+  model?: string;
 }
 
 // Stream execution phases

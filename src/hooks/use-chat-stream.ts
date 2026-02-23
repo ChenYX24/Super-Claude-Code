@@ -37,7 +37,7 @@ export function useChatStream(callbacks: UseChatStreamCallbacks = {}): UseChatSt
       startTimeRef.current = Date.now();
       timerRef.current = setInterval(() => {
         setElapsedMs(Date.now() - startTimeRef.current);
-      }, 100);
+      }, 500);
     } else {
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -116,6 +116,7 @@ export function useChatStream(callbacks: UseChatStreamCallbacks = {}): UseChatSt
           permissionMode: options?.permissionMode || undefined,
           allowedTools: options?.allowedTools || undefined,
           provider: options?.provider || undefined,
+          model: options?.model || undefined,
         }),
         signal: controller.signal,
       });
@@ -159,7 +160,15 @@ export function useChatStream(callbacks: UseChatStreamCallbacks = {}): UseChatSt
             if (event.type === "system" && event.session_id) {
               callbacksRef.current.onSessionId?.(event.session_id);
               if (event.model) callbacksRef.current.onModel?.(event.model);
-              if (event.slash_commands) callbacksRef.current.onSlashCommands?.(event.slash_commands);
+              if (event.slash_commands) {
+                // CLI returns string[] but we need {name, description}[]
+                const cmds = Array.isArray(event.slash_commands)
+                  ? event.slash_commands.map((c: string | { name: string; description?: string }) =>
+                      typeof c === "string" ? { name: c } : c
+                    )
+                  : [];
+                callbacksRef.current.onSlashCommands?.(cmds);
+              }
             } else if (event.type === "assistant" && event.message?.content) {
               const parsed = parseAssistantEvent(event);
               setCurrentPhase(parsed.phase);
@@ -188,7 +197,7 @@ export function useChatStream(callbacks: UseChatStreamCallbacks = {}): UseChatSt
                   m.id === assistantId
                     ? {
                         ...m,
-                        text: m.text || finalText,
+                        text: m.text || finalText || "(Session completed with no text output)",
                         phase: "complete" as StreamPhase,
                         cost: event.cost_usd,
                         durationMs: event.duration_ms,
@@ -207,19 +216,26 @@ export function useChatStream(callbacks: UseChatStreamCallbacks = {}): UseChatSt
               );
               setCurrentPhase("error");
             }
-          } catch {
-            /* skip malformed JSON */
+          } catch (parseErr) {
+            console.warn("[ChatStream] Malformed JSON event:", payload, parseErr);
           }
         }
       }
 
-      // Ensure loading state is cleared
+      // Ensure loading state is cleared and message has displayable text
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantId && m.phase !== "complete" && m.phase !== "error" && m.phase !== "cancelled"
-            ? { ...m, phase: "complete" as StreamPhase, text: m.text || "No response received." }
-            : m
-        )
+        prev.map((m) => {
+          if (m.id !== assistantId) return m;
+          if (m.phase === "cancelled") return m;
+          const needsPhase = m.phase !== "complete" && m.phase !== "error";
+          const needsText = !m.text.trim();
+          if (!needsPhase && !needsText) return m;
+          return {
+            ...m,
+            phase: needsPhase ? ("complete" as StreamPhase) : m.phase,
+            text: needsText ? "No response received." : m.text,
+          };
+        })
       );
       setCurrentPhase((prev) => (prev === "cancelled" ? prev : "complete"));
     } catch (err) {

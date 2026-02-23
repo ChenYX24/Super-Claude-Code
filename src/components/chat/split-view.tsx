@@ -21,6 +21,11 @@ interface SplitViewProps {
   showTools: boolean;
 }
 
+const PROVIDER_LABELS: Record<string, string> = {
+  claude: "Claude",
+  codex: "Codex",
+};
+
 function ProviderPanel({
   provider,
   messages,
@@ -66,7 +71,7 @@ function ProviderPanel({
       {/* Panel header */}
       <div className="border-b bg-card px-3 py-2 flex items-center gap-2 flex-shrink-0">
         <Bot className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold capitalize">{provider}</span>
+        <span className="text-sm font-semibold">{provider === "claude" ? "Claude Code" : provider === "codex" ? "OpenAI Codex" : provider}</span>
         {messages.length > 0 && (
           <Badge variant="outline" className="text-[10px] ml-auto">
             {messages.length} msgs
@@ -106,7 +111,7 @@ function ProviderPanel({
                 </div>
               </div>
             ) : (
-              <LiveAssistantMessage key={msg.id} message={msg} showTools={showTools} />
+              <LiveAssistantMessage key={msg.id} message={msg} showTools={showTools} providerLabel={PROVIDER_LABELS[provider] || provider} />
             )
           )}
         </div>
@@ -119,6 +124,7 @@ function ProviderPanel({
           elapsedMs={elapsedMs}
           toolName={lastToolName}
           onCancel={onCancel}
+          providerLabel={PROVIDER_LABELS[provider] || provider}
         />
       )}
     </div>

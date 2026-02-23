@@ -35,7 +35,7 @@ const VALID_PERMISSION_MODES = ["default", "trust", "acceptEdits", "readOnly", "
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { message, sessionId, cwd, permissionMode, allowedTools, provider: providerName } = body;
+    const { message, sessionId, cwd, permissionMode, allowedTools, provider: providerName, model } = body;
 
     if (!message || typeof message !== "string" || !message.trim()) {
       return new Response(
@@ -80,12 +80,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Verify provider CLI is available
+    if (!provider.isAvailable()) {
+      return new Response(
+        JSON.stringify({ error: `${provider.displayName} CLI is not installed or not found on your system. Please install it first.` }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
     // Build command using provider
     const { binary, args, env } = provider.buildCommand(message.trim(), {
       sessionId,
       cwd,
       permissionMode,
       allowedTools,
+      model: model || undefined,
     });
 
     console.log(`[Chat API] Provider: ${provider.displayName} | Spawning: ${binary} ${args.join(" ")}`);
@@ -94,6 +103,7 @@ export async function POST(req: NextRequest) {
       cwd: cwd || undefined,
       env: env as NodeJS.ProcessEnv,
       windowsHide: true,
+      shell: process.platform === "win32", // Windows needs shell to resolve .cmd wrappers
       stdio: ["pipe", "pipe", "pipe"],
     });
     child.stdin.end(); // close stdin so CLI doesn't wait for input
@@ -111,6 +121,21 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       start(controller) {
         let buffer = "";
+        let closed = false;
+        let stderrBuffer = "";
+        let hasOutput = false;
+
+        const safeEnqueue = (data: string) => {
+          if (closed) return;
+          try { controller.enqueue(encoder.encode(data)); } catch { /* already closed */ }
+        };
+
+        const safeClose = () => {
+          if (closed) return;
+          closed = true;
+          safeEnqueue("data: [DONE]\n\n");
+          try { controller.close(); } catch { /* already closed */ }
+        };
 
         child.stdout.on("data", (chunk: Buffer) => {
           buffer += chunk.toString("utf-8");
@@ -124,9 +149,8 @@ export async function POST(req: NextRequest) {
             // Let the provider parse and normalize the event
             const event = provider.parseEvent(trimmed);
             if (event) {
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify(event.raw)}\n\n`)
-              );
+              hasOutput = true;
+              safeEnqueue(`data: ${JSON.stringify(event.raw)}\n\n`);
             }
           }
         });
@@ -134,36 +158,41 @@ export async function POST(req: NextRequest) {
         child.stderr.on("data", (chunk: Buffer) => {
           const errText = chunk.toString("utf-8").trim();
           if (errText) {
-            console.error(`${provider.displayName} CLI stderr:`, errText);
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: "error", error: errText })}\n\n`)
-            );
+            console.error(`[Chat API] ${provider.displayName} stderr:`, errText);
+            stderrBuffer += (stderrBuffer ? "\n" : "") + errText;
           }
         });
 
         child.on("error", (err) => {
-          console.error(`${provider.displayName} CLI spawn error:`, err);
+          console.error(`[Chat API] ${provider.displayName} spawn error:`, err);
           const msg = (err as NodeJS.ErrnoException).code === "ENOENT"
             ? `${provider.displayName} CLI not found at "${binary}". Make sure it is installed.`
             : err.message;
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "error", error: msg })}\n\n`)
-          );
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
+          safeEnqueue(`data: ${JSON.stringify({ type: "error", error: msg })}\n\n`);
+          safeClose();
         });
 
         child.on("close", (code) => {
-          console.log(`[Chat API] ${provider.displayName} CLI exited with code ${code}`);
+          console.log(`[Chat API] ${provider.displayName} exited with code ${code}`);
           // Flush remaining buffer
           if (buffer.trim()) {
             const event = provider.parseEvent(buffer.trim());
             if (event) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(event.raw)}\n\n`));
+              hasOutput = true;
+              safeEnqueue(`data: ${JSON.stringify(event.raw)}\n\n`);
             }
           }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
+          // If CLI exited with error, send stderr or exit code as error event
+          if (code !== 0 && stderrBuffer) {
+            safeEnqueue(`data: ${JSON.stringify({ type: "error", error: stderrBuffer })}\n\n`);
+          } else if (code !== 0 && !hasOutput) {
+            safeEnqueue(`data: ${JSON.stringify({ type: "error", error: `CLI exited with code ${code}` })}\n\n`);
+          } else if (code === 0 && !hasOutput) {
+            // CLI exited OK but produced no parseable output — likely a resume issue
+            const hint = stderrBuffer ? stderrBuffer : "CLI produced no output. The session may not be resumable.";
+            safeEnqueue(`data: ${JSON.stringify({ type: "error", error: hint })}\n\n`);
+          }
+          safeClose();
         });
       },
     });
